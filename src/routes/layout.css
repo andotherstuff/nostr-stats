@@ -1,0 +1,52 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+:root {
+	--color-violet-400: #a78bfa;
+	--color-violet-500: #8b5cf6;
+	--color-violet-600: #7c3aed;
+	--color-cyan-400: #22d3ee;
+	--color-cyan-500: #06b6d4;
+	--color-pink-400: #f472b6;
+	--color-pink-500: #ec4899;
+	--color-emerald-400: #34d399;
+	--color-emerald-500: #10b981;
+	--color-amber-400: #fbbf24;
+	--color-amber-500: #f59e0b;
+	--color-rose-400: #fb7185;
+	--color-slate-950: #020617;
+}
+
+html {
+	scroll-behavior: smooth;
+}
+
+body {
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: rgb(15 23 42);
+}
+
+::-webkit-scrollbar-thumb {
+	background: rgb(51 65 85);
+	border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: rgb(71 85 105);
+}
+
+/* Selection color */
+::selection {
+	background-color: rgba(167, 139, 250, 0.3);
+	color: white;
+}
