@@ -1,0 +1,2 @@
+// This enables prerendering for all pages (required for static adapter)
+export const prerender = true

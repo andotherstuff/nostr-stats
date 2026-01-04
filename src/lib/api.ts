@@ -166,7 +166,10 @@ export interface NewUsersRow {
 	new_users: number
 }
 
-export function getNewUsers(groupBy: 'day' | 'week' | 'month' = 'day', limit = 30): Promise<NewUsersRow[]> {
+export function getNewUsers(
+	groupBy: 'day' | 'week' | 'month' = 'day',
+	limit = 30
+): Promise<NewUsersRow[]> {
 	return fetchApi(`/api/v1/stats/users/new?group_by=${groupBy}&limit=${limit}`)
 }
 
