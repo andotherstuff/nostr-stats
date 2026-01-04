@@ -24,6 +24,15 @@ export interface OverviewStats {
 	latest_event: number
 }
 
+// Granular stats types
+export interface CountResponse {
+	count: number
+}
+
+export interface TimestampResponse {
+	timestamp: number
+}
+
 export interface ActiveUsersCount {
 	active_users: number
 	has_profile: number
@@ -76,6 +85,27 @@ export interface KindDetail {
 // API functions
 export function getOverview(): Promise<OverviewStats> {
 	return fetchApi('/api/v1/stats')
+}
+
+// Granular stats endpoints (for independent loading)
+export function getTotalEvents(): Promise<CountResponse> {
+	return fetchApi('/api/v1/stats/events/total')
+}
+
+export function getTotalPubkeys(): Promise<CountResponse> {
+	return fetchApi('/api/v1/stats/pubkeys/total')
+}
+
+export function getTotalKinds(): Promise<CountResponse> {
+	return fetchApi('/api/v1/stats/kinds/total')
+}
+
+export function getEarliestEvent(): Promise<TimestampResponse> {
+	return fetchApi('/api/v1/stats/events/earliest')
+}
+
+export function getLatestEvent(): Promise<TimestampResponse> {
+	return fetchApi('/api/v1/stats/events/latest')
 }
 
 export function getActiveUsersSummary(): Promise<ActiveUsersSummary> {

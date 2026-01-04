@@ -65,3 +65,26 @@ export function formatPercent(value: number): string {
 	const sign = value >= 0 ? '+' : ''
 	return `${sign}${value.toFixed(1)}%`
 }
+
+/**
+ * Format sats with BTC conversion for amounts >= 1 BTC
+ * Under 1 BTC: shows sats with K/M suffix (e.g., "500K sats", "50.5M sats")
+ * 1 BTC or more: shows BTC with 2 decimal places (e.g., "1.00 BTC", "2.50 BTC")
+ */
+export function formatSats(sats: number): string {
+	const SATS_PER_BTC = 100_000_000
+
+	if (sats >= SATS_PER_BTC) {
+		const btc = sats / SATS_PER_BTC
+		return `${btc.toFixed(2)} BTC`
+	}
+
+	// Under 1 BTC, show in sats with appropriate suffix
+	if (sats >= 1_000_000) {
+		return `${(sats / 1_000_000).toFixed(2)}M sats`
+	}
+	if (sats >= 1_000) {
+		return `${(sats / 1_000).toFixed(1)}K sats`
+	}
+	return `${sats.toLocaleString()} sats`
+}
