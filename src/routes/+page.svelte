@@ -499,11 +499,21 @@ onMount(() => {
 
 	<div class="mx-auto max-w-7xl px-3 py-3">
 		<!-- Header -->
-		<header class="mb-3 flex items-center justify-between">
-			<h1 class="text-xl font-bold tracking-tight">
-				<span class="bg-gradient-to-r from-violet-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">Nostr</span> Stats
-			</h1>
-			<div class="flex items-center gap-4 text-xs">
+		<header class="mb-3">
+			<div class="flex items-center justify-between">
+				<h1 class="text-xl font-bold tracking-tight">
+					<span class="bg-gradient-to-r from-violet-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">Nostr</span> Stats
+				</h1>
+				<div class="flex items-center gap-2 text-xs">
+					{#if lastUpdated}
+						<span class="text-slate-500 hidden sm:inline">{lastUpdated.toLocaleTimeString()}</span>
+					{/if}
+					<button onclick={loadAllData} disabled={isAnyLoading} class="rounded border border-slate-700 bg-slate-800/50 px-2 py-0.5 text-slate-300 hover:border-violet-500/50 disabled:opacity-50">
+						{isAnyLoading ? '...' : '↻'}
+					</button>
+				</div>
+			</div>
+			<div class="mt-1.5 text-xs">
 				{#if headerLoading}
 					<LoadingSkeleton type="header-stat" />
 				{:else if totalEvents !== null}
@@ -511,18 +521,11 @@ onMount(() => {
 						<span class="text-slate-400">Indexed:</span>
 						<span class="font-mono text-slate-300">{formatNumber(totalEvents)}</span> events
 						{#if earliestEvent !== null && latestEvent !== null}
-							<span class="text-slate-600 mx-1">·</span>
-							{formatDate(earliestEvent)} – {formatDate(latestEvent)}
+							<span class="text-slate-600 mx-1 hidden xs:inline">·</span>
+							<span class="hidden xs:inline">{formatDate(earliestEvent)} – {formatDate(latestEvent)}</span>
 						{/if}
 					</span>
 				{/if}
-				{#if lastUpdated}
-					<span class="text-slate-600">|</span>
-					<span class="text-slate-500">{lastUpdated.toLocaleTimeString()}</span>
-				{/if}
-				<button onclick={loadAllData} disabled={isAnyLoading} class="rounded border border-slate-700 bg-slate-800/50 px-2 py-0.5 text-slate-300 hover:border-violet-500/50 disabled:opacity-50">
-					{isAnyLoading ? '...' : '↻'}
-				</button>
 			</div>
 		</header>
 
@@ -534,9 +537,11 @@ onMount(() => {
 
 		<!-- Users Section -->
 		<section class="mb-6">
-			<h2 class="mb-3 flex items-center gap-2 border-b border-violet-500/30 pb-2 text-base font-bold uppercase tracking-wider text-violet-400">
-				<span>👤</span> Publishing Users
-				<span class="ml-auto text-[10px] font-normal normal-case tracking-normal text-slate-500">Excludes single-use keys (gift wraps, Marmot)</span>
+			<h2 class="mb-3 border-b border-violet-500/30 pb-2">
+				<div class="flex items-center gap-2 text-base font-bold uppercase tracking-wider text-violet-400">
+					<span>👤</span> Publishing Users
+				</div>
+				<div class="mt-1 text-[10px] font-normal normal-case tracking-normal text-slate-500">Excludes single-use keys (gift wraps, Marmot)</div>
 			</h2>
 
 			<!-- Active Users Summary (last complete period) -->
@@ -545,7 +550,7 @@ onMount(() => {
 					<LoadingSkeleton type="stat-row" />
 				</div>
 			{:else if lastCompleteDay && lastCompleteWeek && lastCompleteMonth}
-				<div class="mb-2 grid grid-cols-3 gap-2">
+				<div class="mb-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
 					<div class="rounded-lg border border-violet-500/20 bg-slate-900/50 p-2.5">
 						<div class="flex items-center justify-between text-xs text-slate-400">
 							<span>Yesterday<InfoTooltip text="Unique pubkeys that published at least one event yesterday (last complete day). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
@@ -603,7 +608,7 @@ onMount(() => {
 			{/if}
 
 			<!-- Individual DAU/WAU/MAU Breakdown Charts -->
-			<div class="mb-2 grid gap-2 lg:grid-cols-3">
+			<div class="mb-2 grid gap-2 md:grid-cols-3">
 				{#if dauChartLoading}
 					<LoadingSkeleton type="chart" height={180} />
 				{:else if dailyActiveUsers.length > 0}
@@ -636,7 +641,7 @@ onMount(() => {
 					<LoadingSkeleton type="stat-row" />
 				</div>
 			{:else if newUsers.length >= 91}
-				<div class="mb-2 grid grid-cols-3 gap-2">
+				<div class="mb-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
 					<div class="rounded-lg border border-teal-500/20 bg-slate-900/50 p-2.5">
 						<div class="flex items-center justify-between text-xs text-slate-400">
 							<span>New Yesterday<InfoTooltip text="First-time pubkeys seen publishing any event yesterday (last complete day). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys." /></span>
@@ -694,41 +699,41 @@ onMount(() => {
 			{:else if retention.length > 0}
 				<div class="mt-2 rounded-lg border border-slate-700/50 bg-slate-900/50 p-2.5">
 					<h3 class="mb-1.5 text-xs font-semibold text-slate-400">Weekly Retention (Cohort Analysis)<InfoTooltip text="Cohort retention analysis. Each row represents users who first appeared in that week. Columns show what percentage of those users returned in subsequent weeks." /></h3>
-					<div class="overflow-x-auto">
-						<table class="w-full text-xs">
+					<div class="overflow-x-auto -mx-2.5 px-2.5">
+						<table class="w-full text-[10px] sm:text-xs min-w-[400px]">
 							<thead>
-								<tr class="border-b border-slate-700/50 text-left text-[10px] uppercase tracking-wider text-slate-500">
-									<th class="py-1.5 pr-3">Cohort</th>
-									<th class="py-1.5 px-2 text-right">Size</th>
+								<tr class="border-b border-slate-700/50 text-left text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-500">
+									<th class="py-1.5 pr-2 sm:pr-3 whitespace-nowrap">Cohort</th>
+									<th class="py-1.5 px-1 sm:px-2 text-right whitespace-nowrap">Size</th>
 									{#each Array(Math.min(8, Math.max(...retention.map(r => r.retention_pct.length)))) as _, i}
-										<th class="py-1.5 px-2 text-right">W{i}</th>
+										<th class="py-1.5 px-1 sm:px-2 text-right">W{i}</th>
 									{/each}
 								</tr>
 							</thead>
 							<tbody>
 								{#each retention.slice(0, 12) as cohort}
 									<tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
-										<td class="py-1 pr-3 font-mono text-slate-300">
+										<td class="py-1 pr-2 sm:pr-3 font-mono text-slate-300 whitespace-nowrap">
 											{new Date(cohort.cohort).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
 										</td>
-										<td class="py-1 px-2 text-right font-mono text-slate-400">{formatNumber(cohort.cohort_size)}</td>
+										<td class="py-1 px-1 sm:px-2 text-right font-mono text-slate-400">{formatNumber(cohort.cohort_size)}</td>
 										{#each cohort.retention_pct.slice(0, 8) as pct, i}
 											<td
-												class="py-1 px-2 text-right font-mono"
+												class="py-1 px-1 sm:px-2 text-right font-mono"
 												style="background-color: rgba(139, 92, 246, {Math.min(pct / 100, 1) * 0.5}); color: {pct > 50 ? '#fff' : pct > 20 ? '#c4b5fd' : '#94a3b8'}"
 											>
 												{pct.toFixed(0)}%
 											</td>
 										{/each}
 										{#each Array(Math.max(0, 8 - cohort.retention_pct.length)) as _}
-											<td class="py-1 px-2 text-right text-slate-600">-</td>
+											<td class="py-1 px-1 sm:px-2 text-right text-slate-600">-</td>
 										{/each}
 									</tr>
 								{/each}
 							</tbody>
 						</table>
 					</div>
-					<div class="mt-2 text-[10px] text-slate-500">
+					<div class="mt-2 text-[9px] sm:text-[10px] text-slate-500">
 						W0 = first week (always 100%), W1+ = subsequent weeks. Darker = higher retention.
 					</div>
 				</div>
@@ -738,7 +743,7 @@ onMount(() => {
 
 		<!-- Zaps Section -->
 		<section class="mb-6">
-			<h2 class="mb-3 flex items-center gap-2 border-b border-amber-500/30 pb-2 text-base font-bold uppercase tracking-wider text-amber-400">
+			<h2 class="mb-3 flex items-center gap-2 border-b border-amber-500/30 pb-2 text-sm sm:text-base font-bold uppercase tracking-wider text-amber-400">
 				<span>⚡</span> Zaps
 			</h2>
 
@@ -748,7 +753,7 @@ onMount(() => {
 					<LoadingSkeleton type="stat-row" />
 				</div>
 			{:else if zapStats30d || zapStats90d || zapStatsAllTime}
-				<div class="mb-2 grid gap-2 lg:grid-cols-3">
+				<div class="mb-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
 					{#if zapStats30d}
 						<div class="rounded-lg border border-amber-500/20 bg-slate-900/50 p-2.5">
 							<div class="flex items-center justify-between text-xs text-slate-400">
@@ -814,12 +819,12 @@ onMount(() => {
 
 		<!-- Events Section -->
 		<section class="mb-6">
-			<h2 class="mb-3 flex items-center gap-2 border-b border-emerald-500/30 pb-2 text-base font-bold uppercase tracking-wider text-emerald-400">
+			<h2 class="mb-3 flex items-center gap-2 border-b border-emerald-500/30 pb-2 text-sm sm:text-base font-bold uppercase tracking-wider text-emerald-400">
 				<span>📊</span> Events
 			</h2>
 
 			<!-- Engagement & Throughput Summary -->
-			<div class="mb-2 grid grid-cols-2 gap-2 lg:grid-cols-3">
+			<div class="mb-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
 				{#if engagementLoading}
 					<div class="rounded-lg border border-slate-700/30 bg-slate-900/50 p-2.5 animate-pulse">
 						<div class="h-2.5 w-24 rounded bg-slate-700/50 mb-2"></div>

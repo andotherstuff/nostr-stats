@@ -1,18 +1,50 @@
 <script lang="ts">
+	import { onMount } from 'svelte'
+
 	interface Props {
 		text: string
 	}
 
 	let { text }: Props = $props()
 	let visible = $state(false)
+	let tooltipEl: HTMLDivElement | null = $state(null)
+	let position = $state<'center' | 'left' | 'right'>('center')
+
+	function updatePosition() {
+		if (!tooltipEl) return
+
+		const rect = tooltipEl.getBoundingClientRect()
+		const viewportWidth = window.innerWidth
+		const padding = 12
+
+		// Check if tooltip overflows on left or right
+		if (rect.left < padding) {
+			position = 'left'
+		} else if (rect.right > viewportWidth - padding) {
+			position = 'right'
+		} else {
+			position = 'center'
+		}
+	}
+
+	function show() {
+		visible = true
+		// Wait for next frame so tooltip is rendered, then adjust position
+		requestAnimationFrame(updatePosition)
+	}
+
+	function hide() {
+		visible = false
+		position = 'center'
+	}
 </script>
 
 <span
 	class="info-tooltip"
-	onmouseenter={() => (visible = true)}
-	onmouseleave={() => (visible = false)}
-	onfocus={() => (visible = true)}
-	onblur={() => (visible = false)}
+	onmouseenter={show}
+	onmouseleave={hide}
+	onfocus={show}
+	onblur={hide}
 	tabindex="0"
 	role="button"
 	aria-label="More information"
@@ -29,7 +61,12 @@
 	</svg>
 
 	{#if visible}
-		<div class="tooltip-content">
+		<div
+			bind:this={tooltipEl}
+			class="tooltip-content"
+			class:tooltip-left={position === 'left'}
+			class:tooltip-right={position === 'right'}
+		>
 			{text}
 		</div>
 	{/if}
@@ -51,7 +88,7 @@
 		transform: translateX(-50%);
 		z-index: 50;
 		width: max-content;
-		max-width: 280px;
+		max-width: min(280px, calc(100vw - 24px));
 		padding: 0.5rem 0.75rem;
 		font-size: 0.7rem;
 		font-weight: 400;
@@ -65,6 +102,19 @@
 		animation: tooltip-fade-in 0.15s ease-out;
 	}
 
+	/* Position near left edge - anchor to left */
+	.tooltip-content.tooltip-left {
+		left: 0;
+		transform: translateX(0);
+	}
+
+	/* Position near right edge - anchor to right */
+	.tooltip-content.tooltip-right {
+		left: auto;
+		right: 0;
+		transform: translateX(0);
+	}
+
 	.tooltip-content::after {
 		content: '';
 		position: absolute;
@@ -75,6 +125,17 @@
 		border-top-color: #1e293b;
 	}
 
+	.tooltip-content.tooltip-left::after {
+		left: 10px;
+		transform: translateX(0);
+	}
+
+	.tooltip-content.tooltip-right::after {
+		left: auto;
+		right: 10px;
+		transform: translateX(0);
+	}
+
 	@keyframes tooltip-fade-in {
 		from {
 			opacity: 0;
@@ -83,6 +144,36 @@
 		to {
 			opacity: 1;
 			transform: translateX(-50%) translateY(0);
+		}
+	}
+
+	.tooltip-content.tooltip-left {
+		animation: tooltip-fade-in-left 0.15s ease-out;
+	}
+
+	.tooltip-content.tooltip-right {
+		animation: tooltip-fade-in-right 0.15s ease-out;
+	}
+
+	@keyframes tooltip-fade-in-left {
+		from {
+			opacity: 0;
+			transform: translateY(4px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	@keyframes tooltip-fade-in-right {
+		from {
+			opacity: 0;
+			transform: translateY(4px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
 		}
 	}
 </style>

@@ -60,7 +60,7 @@ const { type = 'card', height = 180, rows = 5 }: Props = $props()
 		</div>
 	</div>
 {:else if type === 'stat-row'}
-	<div class="grid grid-cols-3 gap-2">
+	<div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
 		{#each Array(3) as _}
 			<div class="rounded-lg border border-slate-700/30 bg-slate-900/50 p-2.5 animate-pulse">
 				<div class="flex justify-between mb-1.5">

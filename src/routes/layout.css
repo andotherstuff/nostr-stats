@@ -1,6 +1,11 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 
+/* Custom xs breakpoint for extra-small screens */
+@theme {
+	--breakpoint-xs: 480px;
+}
+
 :root {
 	--color-violet-400: #a78bfa;
 	--color-violet-500: #8b5cf6;
