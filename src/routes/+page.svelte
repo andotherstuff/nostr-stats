@@ -2,7 +2,6 @@
 import { onMount } from 'svelte'
 import {
 	type ActiveUsersRow,
-	type ActiveUsersSummary,
 	type EventCountByPeriod,
 	type EngagementStats,
 	type HourlyActivityRow,
@@ -13,7 +12,6 @@ import {
 	type ZapStatsByPeriod,
 	type ZapHistogramBucket,
 	getActiveUsersDaily,
-	getActiveUsersSummary,
 	getActiveUsersMonthly,
 	getActiveUsersWeekly,
 	getEngagement,
@@ -52,7 +50,6 @@ let latestEvent = $state<number | null>(null)
 let lastUpdated = $state<Date | null>(null)
 
 // Section loading states
-let activeUsersLoading = $state(true)
 let dauChartLoading = $state(true)
 let wauChartLoading = $state(true)
 let mauChartLoading = $state(true)
@@ -69,7 +66,6 @@ let dailyEventsLoading = $state(true)
 let topKindsLoading = $state(true)
 
 // Data
-let activeUsers = $state<ActiveUsersSummary | null>(null)
 let dailyActiveUsers = $state<ActiveUsersRow[]>([])
 let weeklyActiveUsers = $state<ActiveUsersRow[]>([])
 let monthlyActiveUsers = $state<ActiveUsersRow[]>([])
@@ -96,49 +92,49 @@ const KIND_COLORS = [
 	'#fb7185', '#818cf8', '#2dd4bf', '#f97316', '#a3e635',
 ]
 
-// DAU breakdown chart
+// DAU breakdown chart - skip index 0 (current incomplete day), show last 30 complete days
 const dauChartLabels = $derived(
-	dailyActiveUsers.slice(0, 30).reverse().map((d) => {
+	dailyActiveUsers.slice(1, 31).reverse().map((d) => {
 		const date = new Date(d.period)
 		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 	})
 )
 
 const dauChartData = $derived([
-	{ label: 'Publishing Users', data: dailyActiveUsers.slice(0, 30).reverse().map((d) => d.active_users), color: '#a78bfa', fill: true },
-	{ label: 'With Profile', data: dailyActiveUsers.slice(0, 30).reverse().map((d) => d.has_profile), color: '#22d3ee', fill: false },
-	{ label: 'With Follows', data: dailyActiveUsers.slice(0, 30).reverse().map((d) => d.has_follows_list), color: '#34d399', fill: false },
-	{ label: 'Profile + Follows', data: dailyActiveUsers.slice(0, 30).reverse().map((d) => d.has_profile_and_follows_list), color: '#fbbf24', fill: false },
+	{ label: 'Publishing Users', data: dailyActiveUsers.slice(1, 31).reverse().map((d) => d.active_users), color: '#a78bfa', fill: true },
+	{ label: 'With Profile', data: dailyActiveUsers.slice(1, 31).reverse().map((d) => d.has_profile), color: '#22d3ee', fill: false },
+	{ label: 'With Follows', data: dailyActiveUsers.slice(1, 31).reverse().map((d) => d.has_follows_list), color: '#34d399', fill: false },
+	{ label: 'Profile + Follows', data: dailyActiveUsers.slice(1, 31).reverse().map((d) => d.has_profile_and_follows_list), color: '#fbbf24', fill: false },
 ])
 
-// WAU breakdown chart
+// WAU breakdown chart - skip index 0 (current incomplete week), show last 24 complete weeks
 const wauChartLabels = $derived(
-	weeklyActiveUsers.slice(0, 24).reverse().map((d) => {
+	weeklyActiveUsers.slice(1, 25).reverse().map((d) => {
 		const date = new Date(d.period)
 		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 	})
 )
 
 const wauChartData = $derived([
-	{ label: 'Publishing Users', data: weeklyActiveUsers.slice(0, 24).reverse().map((d) => d.active_users), color: '#22d3ee', fill: true },
-	{ label: 'With Profile', data: weeklyActiveUsers.slice(0, 24).reverse().map((d) => d.has_profile), color: '#a78bfa', fill: false },
-	{ label: 'With Follows', data: weeklyActiveUsers.slice(0, 24).reverse().map((d) => d.has_follows_list), color: '#34d399', fill: false },
-	{ label: 'Profile + Follows', data: weeklyActiveUsers.slice(0, 24).reverse().map((d) => d.has_profile_and_follows_list), color: '#fbbf24', fill: false },
+	{ label: 'Publishing Users', data: weeklyActiveUsers.slice(1, 25).reverse().map((d) => d.active_users), color: '#22d3ee', fill: true },
+	{ label: 'With Profile', data: weeklyActiveUsers.slice(1, 25).reverse().map((d) => d.has_profile), color: '#a78bfa', fill: false },
+	{ label: 'With Follows', data: weeklyActiveUsers.slice(1, 25).reverse().map((d) => d.has_follows_list), color: '#34d399', fill: false },
+	{ label: 'Profile + Follows', data: weeklyActiveUsers.slice(1, 25).reverse().map((d) => d.has_profile_and_follows_list), color: '#fbbf24', fill: false },
 ])
 
-// MAU breakdown chart
+// MAU breakdown chart - skip index 0 (current incomplete month), show last 24 complete months
 const mauChartLabels = $derived(
-	monthlyActiveUsers.slice(0, 24).reverse().map((d) => {
+	monthlyActiveUsers.slice(1, 25).reverse().map((d) => {
 		const date = new Date(d.period)
 		return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
 	})
 )
 
 const mauChartData = $derived([
-	{ label: 'Publishing Users', data: monthlyActiveUsers.slice(0, 24).reverse().map((d) => d.active_users), color: '#f472b6', fill: true },
-	{ label: 'With Profile', data: monthlyActiveUsers.slice(0, 24).reverse().map((d) => d.has_profile), color: '#a78bfa', fill: false },
-	{ label: 'With Follows', data: monthlyActiveUsers.slice(0, 24).reverse().map((d) => d.has_follows_list), color: '#34d399', fill: false },
-	{ label: 'Profile + Follows', data: monthlyActiveUsers.slice(0, 24).reverse().map((d) => d.has_profile_and_follows_list), color: '#fbbf24', fill: false },
+	{ label: 'Publishing Users', data: monthlyActiveUsers.slice(1, 25).reverse().map((d) => d.active_users), color: '#f472b6', fill: true },
+	{ label: 'With Profile', data: monthlyActiveUsers.slice(1, 25).reverse().map((d) => d.has_profile), color: '#a78bfa', fill: false },
+	{ label: 'With Follows', data: monthlyActiveUsers.slice(1, 25).reverse().map((d) => d.has_follows_list), color: '#34d399', fill: false },
+	{ label: 'Profile + Follows', data: monthlyActiveUsers.slice(1, 25).reverse().map((d) => d.has_profile_and_follows_list), color: '#fbbf24', fill: false },
 ])
 
 // Daily events stacked bar chart
@@ -183,33 +179,39 @@ const eventsStackedData = $derived(() => {
 	return datasets
 })
 
-// Calculate % changes for active users
+// Calculate % changes for active users (comparing last complete period vs previous)
 const dauChange = $derived(() => {
-	if (dailyActiveUsers.length < 2) return null
-	return percentChange(dailyActiveUsers[0].active_users, dailyActiveUsers[1].active_users)
+	if (dailyActiveUsers.length < 3) return null
+	return percentChange(dailyActiveUsers[1].active_users, dailyActiveUsers[2].active_users)
 })
 
 const wauChange = $derived(() => {
-	if (weeklyActiveUsers.length < 2) return null
-	return percentChange(weeklyActiveUsers[0].active_users, weeklyActiveUsers[1].active_users)
+	if (weeklyActiveUsers.length < 3) return null
+	return percentChange(weeklyActiveUsers[1].active_users, weeklyActiveUsers[2].active_users)
 })
 
 const mauChange = $derived(() => {
-	if (monthlyActiveUsers.length < 2) return null
-	return percentChange(monthlyActiveUsers[0].active_users, monthlyActiveUsers[1].active_users)
+	if (monthlyActiveUsers.length < 3) return null
+	return percentChange(monthlyActiveUsers[1].active_users, monthlyActiveUsers[2].active_users)
 })
+
+// Get last complete period data (index 1, since index 0 is current incomplete period)
+const lastCompleteDay = $derived(dailyActiveUsers.length > 1 ? dailyActiveUsers[1] : null)
+const lastCompleteWeek = $derived(weeklyActiveUsers.length > 1 ? weeklyActiveUsers[1] : null)
+const lastCompleteMonth = $derived(monthlyActiveUsers.length > 1 ? monthlyActiveUsers[1] : null)
 
 
 // New users chart data
+// Skip index 0 (current incomplete day), show last 30 complete days
 const newUsersLabels = $derived(
-	newUsers.slice(0, 30).reverse().map((d) => {
+	newUsers.slice(1, 31).reverse().map((d) => {
 		const date = new Date(d.period)
 		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 	})
 )
 
 const newUsersData = $derived([
-	{ label: 'New Users', data: newUsers.slice(0, 30).reverse().map((d) => d.new_users), color: '#34d399', fill: true },
+	{ label: 'New Users', data: newUsers.slice(1, 31).reverse().map((d) => d.new_users), color: '#34d399', fill: true },
 ])
 
 // Hourly activity chart data (bar chart for hours 0-23)
@@ -222,8 +224,9 @@ const hourlyData = $derived([
 ])
 
 // Zaps chart data
+// Zaps chart - skip index 0 (current incomplete day), show last 30 complete days
 const zapsLabels = $derived(
-	zapsByDay.slice(0, 30).reverse().map((d) => {
+	zapsByDay.slice(1, 31).reverse().map((d) => {
 		const date = new Date(d.period)
 		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 	})
@@ -231,8 +234,8 @@ const zapsLabels = $derived(
 
 // Combined zaps chart with dual axes (sats on left, count on right)
 const zapsCombinedData = $derived([
-	{ label: 'Total Sats', data: zapsByDay.slice(0, 30).reverse().map((d) => d.total_sats), color: '#fbbf24', fill: true },
-	{ label: 'Zap Count', data: zapsByDay.slice(0, 30).reverse().map((d) => d.total_zaps), color: '#fb7185', fill: false },
+	{ label: 'Total Sats', data: zapsByDay.slice(1, 31).reverse().map((d) => d.total_sats), color: '#fbbf24', fill: true },
+	{ label: 'Zap Count', data: zapsByDay.slice(1, 31).reverse().map((d) => d.total_zaps), color: '#fb7185', fill: false },
 ])
 
 // Zap histogram chart data
@@ -278,16 +281,6 @@ async function loadHeaderStats() {
 	}
 }
 
-async function loadActiveUsersSummary() {
-	activeUsersLoading = true
-	try {
-		activeUsers = await getActiveUsersSummary()
-	} catch (e) {
-		console.warn('Active users summary failed:', e)
-	} finally {
-		activeUsersLoading = false
-	}
-}
 
 async function loadDauChart() {
 	dauChartLoading = true
@@ -326,7 +319,7 @@ async function loadNewUsers() {
 	newUsersLoading = true
 	newUsersChartLoading = true
 	try {
-		newUsers = await getNewUsers('day', 30)
+		newUsers = await getNewUsers('day', 92)
 	} catch (e) {
 		console.warn('New users failed:', e)
 	} finally {
@@ -338,7 +331,7 @@ async function loadNewUsers() {
 async function loadRetention() {
 	retentionLoading = true
 	try {
-		retention = await getUserRetention(12)
+		retention = await getUserRetention('week', 12)
 	} catch (e) {
 		console.warn('Retention failed:', e)
 	} finally {
@@ -367,7 +360,7 @@ async function loadZapsSummary() {
 async function loadZapsChart() {
 	zapsChartLoading = true
 	try {
-		zapsByDay = await getZapStatsByDay(30, 30)
+		zapsByDay = await getZapStatsByDay(31, 31)
 	} catch (e) {
 		console.warn('Zaps chart failed:', e)
 	} finally {
@@ -458,7 +451,6 @@ async function loadAllData() {
 	// Fire off all loaders in parallel - they each manage their own loading state
 	await Promise.all([
 		loadHeaderStats(),
-		loadActiveUsersSummary(),
 		loadDauChart(),
 		loadWauChart(),
 		loadMauChart(),
@@ -477,7 +469,7 @@ async function loadAllData() {
 
 // Check if any section is still loading
 const isAnyLoading = $derived(
-	headerLoading || activeUsersLoading || dauChartLoading || wauChartLoading ||
+	headerLoading || dauChartLoading || wauChartLoading ||
 	mauChartLoading || newUsersLoading || retentionLoading || zapsSummaryLoading ||
 	zapsChartLoading || zapsHistogramLoading || engagementLoading || throughputLoading ||
 	hourlyActivityLoading || dailyEventsLoading || topKindsLoading
@@ -544,66 +536,67 @@ onMount(() => {
 		<section class="mb-6">
 			<h2 class="mb-3 flex items-center gap-2 border-b border-violet-500/30 pb-2 text-base font-bold uppercase tracking-wider text-violet-400">
 				<span>👤</span> Publishing Users
+				<span class="ml-auto text-[10px] font-normal normal-case tracking-normal text-slate-500">Excludes single-use keys (gift wraps, Marmot)</span>
 			</h2>
 
-			<!-- Active Users Summary -->
-			{#if activeUsersLoading}
+			<!-- Active Users Summary (last complete period) -->
+			{#if dauChartLoading || wauChartLoading || mauChartLoading}
 				<div class="mb-2">
 					<LoadingSkeleton type="stat-row" />
 				</div>
-			{:else if activeUsers}
+			{:else if lastCompleteDay && lastCompleteWeek && lastCompleteMonth}
 				<div class="mb-2 grid grid-cols-3 gap-2">
 					<div class="rounded-lg border border-violet-500/20 bg-slate-900/50 p-2.5">
 						<div class="flex items-center justify-between text-xs text-slate-400">
-							<span>Daily Publishing (24h)<InfoTooltip text="Unique pubkeys that published at least one event in the last 24 hours. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
+							<span>Yesterday<InfoTooltip text="Unique pubkeys that published at least one event yesterday (last complete day). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
 							<span class="rounded bg-violet-500/20 px-1.5 py-0.5 text-violet-400">DPU</span>
 						</div>
 						<div class="mt-1 flex items-baseline gap-2">
-							<span class="font-mono text-2xl font-bold text-violet-400">{formatNumber(activeUsers.daily.active_users)}</span>
+							<span class="font-mono text-2xl font-bold text-violet-400">{formatNumber(lastCompleteDay.active_users)}</span>
 							{#if dauChange() !== null}
 								<span class="text-xs {dauChange()! >= 0 ? 'text-emerald-400' : 'text-rose-400'}">{formatPercent(dauChange()!)}</span>
 							{/if}
 						</div>
 						<div class="mt-1 text-xs text-slate-500 space-y-0.5">
-							<div class="flex justify-between"><span>w/ profile</span><span class="font-mono text-slate-400">{formatNumber(activeUsers.daily.has_profile)}</span></div>
-							<div class="flex justify-between"><span>w/ follows</span><span class="font-mono text-slate-400">{formatNumber(activeUsers.daily.has_follows_list)}</span></div>
-							<div class="flex justify-between"><span>w/ both</span><span class="font-mono text-slate-400">{formatNumber(activeUsers.daily.has_profile_and_follows_list)}</span></div>
+							<div class="flex justify-between"><span>w/ profile</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteDay.has_profile)}</span></div>
+							<div class="flex justify-between"><span>w/ follows</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteDay.has_follows_list)}</span></div>
+							<div class="flex justify-between"><span>w/ both</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteDay.has_profile_and_follows_list)}</span></div>
 						</div>
 					</div>
 
 					<div class="rounded-lg border border-cyan-500/20 bg-slate-900/50 p-2.5">
 						<div class="flex items-center justify-between text-xs text-slate-400">
-							<span>Weekly Publishing (7d)<InfoTooltip text="Unique pubkeys that published at least one event in the last 7 days. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
+							<span>Last Week<InfoTooltip text="Unique pubkeys that published at least one event last week (last complete 7-day period). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
 							<span class="rounded bg-cyan-500/20 px-1.5 py-0.5 text-cyan-400">WPU</span>
 						</div>
 						<div class="mt-1 flex items-baseline gap-2">
-							<span class="font-mono text-2xl font-bold text-cyan-400">{formatNumber(activeUsers.weekly.active_users)}</span>
+							<span class="font-mono text-2xl font-bold text-cyan-400">{formatNumber(lastCompleteWeek.active_users)}</span>
 							{#if wauChange() !== null}
 								<span class="text-xs {wauChange()! >= 0 ? 'text-emerald-400' : 'text-rose-400'}">{formatPercent(wauChange()!)}</span>
 							{/if}
 						</div>
 						<div class="mt-1 text-xs text-slate-500 space-y-0.5">
-							<div class="flex justify-between"><span>w/ profile</span><span class="font-mono text-slate-400">{formatNumber(activeUsers.weekly.has_profile)}</span></div>
-							<div class="flex justify-between"><span>w/ follows</span><span class="font-mono text-slate-400">{formatNumber(activeUsers.weekly.has_follows_list)}</span></div>
-							<div class="flex justify-between"><span>w/ both</span><span class="font-mono text-slate-400">{formatNumber(activeUsers.weekly.has_profile_and_follows_list)}</span></div>
+							<div class="flex justify-between"><span>w/ profile</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteWeek.has_profile)}</span></div>
+							<div class="flex justify-between"><span>w/ follows</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteWeek.has_follows_list)}</span></div>
+							<div class="flex justify-between"><span>w/ both</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteWeek.has_profile_and_follows_list)}</span></div>
 						</div>
 					</div>
 
 					<div class="rounded-lg border border-pink-500/20 bg-slate-900/50 p-2.5">
 						<div class="flex items-center justify-between text-xs text-slate-400">
-							<span>Monthly Publishing (30d)<InfoTooltip text="Unique pubkeys that published at least one event in the last 30 days. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
+							<span>Last Month<InfoTooltip text="Unique pubkeys that published at least one event last month (last complete calendar month). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
 							<span class="rounded bg-pink-500/20 px-1.5 py-0.5 text-pink-400">MPU</span>
 						</div>
 						<div class="mt-1 flex items-baseline gap-2">
-							<span class="font-mono text-2xl font-bold text-pink-400">{formatNumber(activeUsers.monthly.active_users)}</span>
+							<span class="font-mono text-2xl font-bold text-pink-400">{formatNumber(lastCompleteMonth.active_users)}</span>
 							{#if mauChange() !== null}
 								<span class="text-xs {mauChange()! >= 0 ? 'text-emerald-400' : 'text-rose-400'}">{formatPercent(mauChange()!)}</span>
 							{/if}
 						</div>
 						<div class="mt-1 text-xs text-slate-500 space-y-0.5">
-							<div class="flex justify-between"><span>w/ profile</span><span class="font-mono text-slate-400">{formatNumber(activeUsers.monthly.has_profile)}</span></div>
-							<div class="flex justify-between"><span>w/ follows</span><span class="font-mono text-slate-400">{formatNumber(activeUsers.monthly.has_follows_list)}</span></div>
-							<div class="flex justify-between"><span>w/ both</span><span class="font-mono text-slate-400">{formatNumber(activeUsers.monthly.has_profile_and_follows_list)}</span></div>
+							<div class="flex justify-between"><span>w/ profile</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteMonth.has_profile)}</span></div>
+							<div class="flex justify-between"><span>w/ follows</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteMonth.has_follows_list)}</span></div>
+							<div class="flex justify-between"><span>w/ both</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteMonth.has_profile_and_follows_list)}</span></div>
 						</div>
 					</div>
 				</div>
@@ -637,47 +630,47 @@ onMount(() => {
 				{/if}
 			</div>
 
-			<!-- New Users Summary -->
+			<!-- New Users Summary (last complete periods) -->
 			{#if newUsersLoading}
 				<div class="mb-2">
 					<LoadingSkeleton type="stat-row" />
 				</div>
-			{:else if newUsers.length > 0}
+			{:else if newUsers.length >= 91}
 				<div class="mb-2 grid grid-cols-3 gap-2">
 					<div class="rounded-lg border border-teal-500/20 bg-slate-900/50 p-2.5">
 						<div class="flex items-center justify-between text-xs text-slate-400">
-							<span>New Today<InfoTooltip text="First-time pubkeys seen publishing any event today. A pubkey is counted as 'new' on the day of their first indexed event." /></span>
-							<span class="rounded bg-teal-500/20 px-1.5 py-0.5 text-teal-400">24h</span>
+							<span>New Yesterday<InfoTooltip text="First-time pubkeys seen publishing any event yesterday (last complete day). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys." /></span>
+							<span class="rounded bg-teal-500/20 px-1.5 py-0.5 text-teal-400">1d</span>
 						</div>
-						<div class="mt-1 font-mono text-2xl font-bold text-teal-400">{formatNumber(newUsers[0]?.new_users ?? 0)}</div>
+						<div class="mt-1 font-mono text-2xl font-bold text-teal-400">{formatNumber(newUsers[1]?.new_users ?? 0)}</div>
 						<div class="mt-1 text-xs text-slate-500 space-y-0.5">
-							<div class="flex justify-between"><span>yesterday</span><span class="font-mono text-slate-400">{formatNumber(newUsers[1]?.new_users ?? 0)}</span></div>
 							<div class="flex justify-between"><span>2 days ago</span><span class="font-mono text-slate-400">{formatNumber(newUsers[2]?.new_users ?? 0)}</span></div>
-							<div class="flex justify-between"><span>7d avg</span><span class="font-mono text-slate-400">{formatNumber(Math.round(newUsers.slice(0, 7).reduce((a, b) => a + b.new_users, 0) / 7))}</span></div>
+							<div class="flex justify-between"><span>3 days ago</span><span class="font-mono text-slate-400">{formatNumber(newUsers[3]?.new_users ?? 0)}</span></div>
+							<div class="flex justify-between"><span>7d avg</span><span class="font-mono text-slate-400">{formatNumber(Math.round(newUsers.slice(1, 8).reduce((a, b) => a + b.new_users, 0) / 7))}</span></div>
 						</div>
 					</div>
 					<div class="rounded-lg border border-emerald-500/20 bg-slate-900/50 p-2.5">
 						<div class="flex items-center justify-between text-xs text-slate-400">
-							<span>New This Week<InfoTooltip text="Total first-time pubkeys seen in the last 7 days. Shows week-over-week comparison and daily average." /></span>
+							<span>New Last Week<InfoTooltip text="Total first-time pubkeys in the last complete 7-day period. Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys." /></span>
 							<span class="rounded bg-emerald-500/20 px-1.5 py-0.5 text-emerald-400">7d</span>
 						</div>
-						<div class="mt-1 font-mono text-2xl font-bold text-emerald-400">{formatNumber(newUsers.slice(0, 7).reduce((a, b) => a + b.new_users, 0))}</div>
+						<div class="mt-1 font-mono text-2xl font-bold text-emerald-400">{formatNumber(newUsers.slice(1, 8).reduce((a, b) => a + b.new_users, 0))}</div>
 						<div class="mt-1 text-xs text-slate-500 space-y-0.5">
-							<div class="flex justify-between"><span>last week</span><span class="font-mono text-slate-400">{formatNumber(newUsers.slice(7, 14).reduce((a, b) => a + b.new_users, 0))}</span></div>
-							<div class="flex justify-between"><span>2 weeks ago</span><span class="font-mono text-slate-400">{formatNumber(newUsers.slice(14, 21).reduce((a, b) => a + b.new_users, 0))}</span></div>
-							<div class="flex justify-between"><span>daily avg</span><span class="font-mono text-slate-400">{formatNumber(Math.round(newUsers.slice(0, 7).reduce((a, b) => a + b.new_users, 0) / 7))}</span></div>
+							<div class="flex justify-between"><span>prev week</span><span class="font-mono text-slate-400">{formatNumber(newUsers.slice(8, 15).reduce((a, b) => a + b.new_users, 0))}</span></div>
+							<div class="flex justify-between"><span>2 weeks ago</span><span class="font-mono text-slate-400">{formatNumber(newUsers.slice(15, 22).reduce((a, b) => a + b.new_users, 0))}</span></div>
+							<div class="flex justify-between"><span>daily avg</span><span class="font-mono text-slate-400">{formatNumber(Math.round(newUsers.slice(1, 8).reduce((a, b) => a + b.new_users, 0) / 7))}</span></div>
 						</div>
 					</div>
 					<div class="rounded-lg border border-lime-500/20 bg-slate-900/50 p-2.5">
 						<div class="flex items-center justify-between text-xs text-slate-400">
-							<span>New This Month<InfoTooltip text="Total first-time pubkeys seen in the last 30 days. Shows first vs last 2 weeks comparison and daily average." /></span>
+							<span>New Last Month<InfoTooltip text="Total first-time pubkeys in the last complete 30-day period. Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys." /></span>
 							<span class="rounded bg-lime-500/20 px-1.5 py-0.5 text-lime-400">30d</span>
 						</div>
-						<div class="mt-1 font-mono text-2xl font-bold text-lime-400">{formatNumber(newUsers.reduce((a, b) => a + b.new_users, 0))}</div>
+						<div class="mt-1 font-mono text-2xl font-bold text-lime-400">{formatNumber(newUsers.slice(1, 31).reduce((a, b) => a + b.new_users, 0))}</div>
 						<div class="mt-1 text-xs text-slate-500 space-y-0.5">
-							<div class="flex justify-between"><span>first 2 weeks</span><span class="font-mono text-slate-400">{formatNumber(newUsers.slice(0, 14).reduce((a, b) => a + b.new_users, 0))}</span></div>
-							<div class="flex justify-between"><span>last 2 weeks</span><span class="font-mono text-slate-400">{formatNumber(newUsers.slice(14, 30).reduce((a, b) => a + b.new_users, 0))}</span></div>
-							<div class="flex justify-between"><span>daily avg</span><span class="font-mono text-slate-400">{formatNumber(Math.round(newUsers.reduce((a, b) => a + b.new_users, 0) / 30))}</span></div>
+							<div class="flex justify-between"><span>prev month</span><span class="font-mono text-slate-400">{formatNumber(newUsers.slice(31, 61).reduce((a, b) => a + b.new_users, 0))}</span></div>
+							<div class="flex justify-between"><span>2 months ago</span><span class="font-mono text-slate-400">{formatNumber(newUsers.slice(61, 91).reduce((a, b) => a + b.new_users, 0))}</span></div>
+							<div class="flex justify-between"><span>daily avg</span><span class="font-mono text-slate-400">{formatNumber(Math.round(newUsers.slice(1, 31).reduce((a, b) => a + b.new_users, 0) / 30))}</span></div>
 						</div>
 					</div>
 				</div>

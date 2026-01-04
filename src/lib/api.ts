@@ -178,8 +178,11 @@ export interface RetentionCohort {
 	retention_pct: number[]
 }
 
-export function getUserRetention(weeks = 12): Promise<RetentionCohort[]> {
-	return fetchApi(`/api/v1/stats/users/retention?weeks=${weeks}`)
+export function getUserRetention(
+	cohortSize: 'week' | 'month' = 'week',
+	limit = 12
+): Promise<RetentionCohort[]> {
+	return fetchApi(`/api/v1/stats/users/retention?cohort_size=${cohortSize}&limit=${limit}`)
 }
 
 // Hourly activity pattern
