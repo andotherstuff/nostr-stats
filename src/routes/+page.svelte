@@ -500,10 +500,24 @@ onMount(() => {
 	<div class="mx-auto max-w-7xl px-3 py-3">
 		<!-- Header -->
 		<header class="mb-3">
-			<div class="flex items-center justify-between">
+			<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
 				<h1 class="text-xl font-bold tracking-tight">
 					<span class="bg-gradient-to-r from-violet-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">Nostr</span> Stats
 				</h1>
+				<div class="flex items-center gap-2 sm:gap-3 text-xs order-last sm:order-none w-full sm:w-auto">
+					{#if headerLoading}
+						<LoadingSkeleton type="header-stat" />
+					{:else if totalEvents !== null}
+						<span class="text-slate-500">
+							<span class="text-slate-400">Indexed:</span>
+							<span class="font-mono text-slate-300">{formatNumber(totalEvents)}</span> events
+							{#if earliestEvent !== null && latestEvent !== null}
+								<span class="text-slate-600 mx-1">·</span>
+								<span>{formatDate(earliestEvent)} – {formatDate(latestEvent)}</span>
+							{/if}
+						</span>
+					{/if}
+				</div>
 				<div class="flex items-center gap-2 text-xs">
 					{#if lastUpdated}
 						<span class="text-slate-500 hidden sm:inline">{lastUpdated.toLocaleTimeString()}</span>
@@ -512,20 +526,6 @@ onMount(() => {
 						{isAnyLoading ? '...' : '↻'}
 					</button>
 				</div>
-			</div>
-			<div class="mt-1.5 text-xs">
-				{#if headerLoading}
-					<LoadingSkeleton type="header-stat" />
-				{:else if totalEvents !== null}
-					<span class="text-slate-500">
-						<span class="text-slate-400">Indexed:</span>
-						<span class="font-mono text-slate-300">{formatNumber(totalEvents)}</span> events
-						{#if earliestEvent !== null && latestEvent !== null}
-							<span class="text-slate-600 mx-1 hidden xs:inline">·</span>
-							<span class="hidden xs:inline">{formatDate(earliestEvent)} – {formatDate(latestEvent)}</span>
-						{/if}
-					</span>
-				{/if}
 			</div>
 		</header>
 

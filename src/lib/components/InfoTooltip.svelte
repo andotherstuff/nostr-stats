@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte'
+	import { tick } from 'svelte'
 
 	interface Props {
 		text: string
@@ -8,38 +8,48 @@
 	let { text }: Props = $props()
 	let visible = $state(false)
 	let tooltipEl: HTMLDivElement | null = $state(null)
-	let position = $state<'center' | 'left' | 'right'>('center')
+	let iconEl: HTMLSpanElement | null = $state(null)
+	let tooltipStyle = $state('')
 
 	function updatePosition() {
-		if (!tooltipEl) return
+		if (!tooltipEl || !iconEl) return
 
-		const rect = tooltipEl.getBoundingClientRect()
+		const iconRect = iconEl.getBoundingClientRect()
+		const tooltipRect = tooltipEl.getBoundingClientRect()
 		const viewportWidth = window.innerWidth
 		const padding = 12
 
-		// Check if tooltip overflows on left or right
-		if (rect.left < padding) {
-			position = 'left'
-		} else if (rect.right > viewportWidth - padding) {
-			position = 'right'
-		} else {
-			position = 'center'
+		// Calculate ideal center position
+		let left = iconRect.left + iconRect.width / 2 - tooltipRect.width / 2
+
+		// Clamp to viewport bounds
+		if (left < padding) {
+			left = padding
+		} else if (left + tooltipRect.width > viewportWidth - padding) {
+			left = viewportWidth - padding - tooltipRect.width
 		}
+
+		// Position above the icon
+		const top = iconRect.top - tooltipRect.height - 8
+
+		tooltipStyle = `top: ${top}px; left: ${left}px;`
 	}
 
-	function show() {
+	async function show() {
 		visible = true
-		// Wait for next frame so tooltip is rendered, then adjust position
-		requestAnimationFrame(updatePosition)
+		// Wait for Svelte to render the tooltip, then calculate position
+		await tick()
+		updatePosition()
 	}
 
 	function hide() {
 		visible = false
-		position = 'center'
+		tooltipStyle = ''
 	}
 </script>
 
 <span
+	bind:this={iconEl}
 	class="info-tooltip"
 	onmouseenter={show}
 	onmouseleave={hide}
@@ -64,8 +74,7 @@
 		<div
 			bind:this={tooltipEl}
 			class="tooltip-content"
-			class:tooltip-left={position === 'left'}
-			class:tooltip-right={position === 'right'}
+			style={tooltipStyle}
 		>
 			{text}
 		</div>
@@ -82,11 +91,8 @@
 	}
 
 	.tooltip-content {
-		position: absolute;
-		bottom: calc(100% + 8px);
-		left: 50%;
-		transform: translateX(-50%);
-		z-index: 50;
+		position: fixed;
+		z-index: 9999;
 		width: max-content;
 		max-width: min(280px, calc(100vw - 24px));
 		padding: 0.5rem 0.75rem;
@@ -102,71 +108,7 @@
 		animation: tooltip-fade-in 0.15s ease-out;
 	}
 
-	/* Position near left edge - anchor to left */
-	.tooltip-content.tooltip-left {
-		left: 0;
-		transform: translateX(0);
-	}
-
-	/* Position near right edge - anchor to right */
-	.tooltip-content.tooltip-right {
-		left: auto;
-		right: 0;
-		transform: translateX(0);
-	}
-
-	.tooltip-content::after {
-		content: '';
-		position: absolute;
-		top: 100%;
-		left: 50%;
-		transform: translateX(-50%);
-		border: 6px solid transparent;
-		border-top-color: #1e293b;
-	}
-
-	.tooltip-content.tooltip-left::after {
-		left: 10px;
-		transform: translateX(0);
-	}
-
-	.tooltip-content.tooltip-right::after {
-		left: auto;
-		right: 10px;
-		transform: translateX(0);
-	}
-
 	@keyframes tooltip-fade-in {
-		from {
-			opacity: 0;
-			transform: translateX(-50%) translateY(4px);
-		}
-		to {
-			opacity: 1;
-			transform: translateX(-50%) translateY(0);
-		}
-	}
-
-	.tooltip-content.tooltip-left {
-		animation: tooltip-fade-in-left 0.15s ease-out;
-	}
-
-	.tooltip-content.tooltip-right {
-		animation: tooltip-fade-in-right 0.15s ease-out;
-	}
-
-	@keyframes tooltip-fade-in-left {
-		from {
-			opacity: 0;
-			transform: translateY(4px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-
-	@keyframes tooltip-fade-in-right {
 		from {
 			opacity: 0;
 			transform: translateY(4px);
