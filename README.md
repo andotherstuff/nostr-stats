@@ -133,10 +133,48 @@ src/
 
 This project is configured for static deployment to GitHub Pages using the `@sveltejs/adapter-static` adapter. The build process generates static HTML, CSS, and JavaScript files in the `build/` directory.
 
-For GitHub Pages deployment:
-1. Build the project: `bun run build`
-2. Deploy the `build/` directory to GitHub Pages
-3. Set the `BASE_PATH` environment variable to match your repository path if deploying to a subdirectory
+### GitHub Pages Setup
+
+#### Initial Setup
+
+1. **Enable GitHub Pages in your repository:**
+   - Go to your repository on GitHub
+   - Navigate to **Settings** → **Pages**
+   - Under **Source**, select **GitHub Actions**
+
+2. **Configure repository secrets (optional):**
+   - Go to **Settings** → **Secrets and variables** → **Actions**
+   - Add secrets if needed:
+     - `VITE_API_URL` - Your backend API URL (defaults to `http://localhost:8080` if not set)
+     - `VITE_API_TOKEN` - Optional API authentication token
+
+#### Automated Deployment
+
+The project includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that automatically deploys to GitHub Pages when you push to the `master` branch.
+
+**The workflow will:**
+- Build the project with the correct `BASE_PATH` for your repository
+- Deploy the `build/` directory to GitHub Pages
+- Handle the repository name in the base path automatically
+
+**To deploy:**
+1. Push your changes to the `master` branch
+2. The workflow will run automatically
+3. Once complete, your site will be available at `https://<username>.github.io/<repository-name>/`
+
+#### Manual Deployment
+
+If you prefer to deploy manually:
+
+```bash
+# Build with the correct base path for your repository
+# Replace 'nostr-stats' with your actual repository name
+BASE_PATH=/nostr-stats bun run build
+
+# Then upload the build/ directory to GitHub Pages
+```
+
+**Note:** The `BASE_PATH` should match your repository name. For example, if your repository is `username/nostr-stats`, set `BASE_PATH=/nostr-stats`. If deploying to a custom domain, leave `BASE_PATH` empty.
 
 ## License
 

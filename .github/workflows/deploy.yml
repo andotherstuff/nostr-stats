@@ -2,19 +2,18 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: ['main']
+    branches:
+      - master
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment
 concurrency:
-  group: 'pages'
-  cancel-in-progress: true
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -33,15 +32,18 @@ jobs:
 
       - name: Build
         env:
-          BASE_PATH: '/${{ github.event.repository.name }}'
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          BASE_PATH: /${{ github.event.repository.name }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_API_TOKEN: ${{ secrets.VITE_API_TOKEN }}
         run: bun run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: 'build'
+          path: build
 
   deploy:
     environment:
@@ -53,4 +55,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
