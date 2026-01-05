@@ -269,6 +269,18 @@ export function getLongformStats(days?: number): Promise<LongformStats> {
 	return fetchApi(`/api/v1/stats/longform${params}`)
 }
 
+// Relay distribution (NIP-65 relay lists)
+export interface RelayDistributionRow {
+	relay_url: string
+	user_count: number
+	read_count: number
+	write_count: number
+}
+
+export function getRelayDistribution(limit = 100): Promise<RelayDistributionRow[]> {
+	return fetchApi(`/api/v1/stats/relays/distribution?limit=${limit}`)
+}
+
 // Kind names for common event types (from NIPs)
 export const KIND_NAMES: Record<number, string> = {
 	// Core protocol (NIP-01, NIP-10)

@@ -86,6 +86,12 @@ src/
 - Components use Svelte 5 runes syntax (`$state`, `$derived`, `$effect`)
 - API types are defined in `src/lib/api.ts`
 
+## API Documentation
+
+The canonical API documentation is available at: **https://ipf.works/docs**
+
+Always reference this documentation when working with backend endpoints. It contains the full API specification including request/response schemas.
+
 ## Environment Variables
 
 The app uses these environment variables (set via `.env` or build args):

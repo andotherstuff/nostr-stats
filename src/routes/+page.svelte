@@ -6,6 +6,7 @@ import {
 	type EngagementStats,
 	type HourlyActivityRow,
 	type NewUsersRow,
+	type RelayDistributionRow,
 	type RetentionCohort,
 	type ThroughputStats,
 	type ZapStatsAggregate,
@@ -21,6 +22,7 @@ import {
 	getKindActivity,
 	getNewUsers,
 	getKindName,
+	getRelayDistribution,
 	getThroughput,
 	getUserRetention,
 	getZapStats,
@@ -64,6 +66,7 @@ let throughputLoading = $state(true)
 let hourlyActivityLoading = $state(true)
 let dailyEventsLoading = $state(true)
 let topKindsLoading = $state(true)
+let relayDistributionLoading = $state(true)
 
 // Data
 let dailyActiveUsers = $state<ActiveUsersRow[]>([])
@@ -82,15 +85,122 @@ let zapStatsAllTime = $state<ZapStatsAggregate | null>(null)
 let zapsByDay = $state<ZapStatsByPeriod[]>([])
 let zapHistogram = $state<ZapHistogramBucket[]>([])
 let engagement = $state<EngagementStats | null>(null)
+let relayDistribution = $state<RelayDistributionRow[]>([])
+
+// Relay reachability status: 'checking' | 'reachable' | 'unreachable'
+let relayStatus = $state<Map<string, 'checking' | 'reachable' | 'unreachable'>>(new Map())
+
+// Check if a relay is reachable via WebSocket (non-blocking)
+function checkRelayReachability(relayUrl: string): void {
+	relayStatus.set(relayUrl, 'checking')
+	relayStatus = new Map(relayStatus) // Trigger reactivity
+
+	const timeout = 5000 // 5 second timeout
+	let ws: WebSocket | null = null
+	let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+	const cleanup = () => {
+		if (timeoutId) clearTimeout(timeoutId)
+		if (ws) {
+			ws.onopen = null
+			ws.onerror = null
+			ws.onclose = null
+			if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+				ws.close()
+			}
+		}
+	}
+
+	const markReachable = () => {
+		cleanup()
+		relayStatus.set(relayUrl, 'reachable')
+		relayStatus = new Map(relayStatus)
+	}
+
+	const markUnreachable = () => {
+		cleanup()
+		relayStatus.set(relayUrl, 'unreachable')
+		relayStatus = new Map(relayStatus)
+	}
+
+	try {
+		ws = new WebSocket(relayUrl)
+		ws.onopen = markReachable
+		ws.onerror = markUnreachable
+		timeoutId = setTimeout(markUnreachable, timeout)
+	} catch {
+		markUnreachable()
+	}
+}
+
+// Check all relays in the distribution list
+function checkAllRelays(): void {
+	for (const relay of relayDistribution) {
+		checkRelayReachability(relay.relay_url)
+	}
+}
 
 // Global error state
 let globalError = $state<string | null>(null)
 
-// Chart colors for kinds
+// Colorblind-safe chart palette (based on Wong's accessible palette, adjusted for dark backgrounds)
+// These colors are distinguishable for deuteranopia, protanopia, and tritanopia
 const KIND_COLORS = [
-	'#a78bfa', '#22d3ee', '#f472b6', '#34d399', '#fbbf24',
-	'#fb7185', '#818cf8', '#2dd4bf', '#f97316', '#a3e635',
+	'#56b4e9', // sky blue
+	'#e69f00', // orange
+	'#cc79a7', // reddish purple/pink
+	'#009e73', // bluish green
+	'#f0e442', // yellow
+	'#0072b2', // blue
+	'#d55e00', // vermillion/red-orange
+	'#999999', // gray
+	'#88ccee', // light blue
+	'#ddcc77', // sand/tan
 ]
+
+// Colorblind-safe sequential heatmap color (blue → yellow/orange)
+// Uses luminance AND hue changes for accessibility
+function getHeatmapColor(pct: number): { bg: string; text: string } {
+	// Normalize to 0-1 range
+	const t = Math.min(Math.max(pct / 100, 0), 1)
+
+	// Sequential scale: dark blue (low) → teal → yellow/orange (high)
+	// These colors are perceptually uniform and colorblind-safe
+	let r: number, g: number, b: number
+
+	if (t < 0.25) {
+		// Dark blue to medium blue (0-25%)
+		const s = t / 0.25
+		r = Math.round(30 + s * 20)
+		g = Math.round(50 + s * 60)
+		b = Math.round(80 + s * 60)
+	} else if (t < 0.5) {
+		// Medium blue to teal (25-50%)
+		const s = (t - 0.25) / 0.25
+		r = Math.round(50 + s * 0)
+		g = Math.round(110 + s * 50)
+		b = Math.round(140 - s * 20)
+	} else if (t < 0.75) {
+		// Teal to yellow-green (50-75%)
+		const s = (t - 0.5) / 0.25
+		r = Math.round(50 + s * 130)
+		g = Math.round(160 + s * 40)
+		b = Math.round(120 - s * 70)
+	} else {
+		// Yellow-green to orange (75-100%)
+		const s = (t - 0.75) / 0.25
+		r = Math.round(180 + s * 50)
+		g = Math.round(200 - s * 60)
+		b = Math.round(50 - s * 30)
+	}
+
+	const bg = `rgb(${r}, ${g}, ${b})`
+	// Text color: dark for bright backgrounds, light for dark backgrounds
+	const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+	const text = luminance > 0.5 ? '#1e293b' : '#f1f5f9'
+
+	return { bg, text }
+}
 
 // DAU breakdown chart - skip index 0 (current incomplete day), show last 30 complete days
 const dauChartLabels = $derived(
@@ -101,10 +211,10 @@ const dauChartLabels = $derived(
 )
 
 const dauChartData = $derived([
-	{ label: 'Publishing Users', data: dailyActiveUsers.slice(1, 31).reverse().map((d) => d.active_users), color: '#a78bfa', fill: true },
-	{ label: 'With Profile', data: dailyActiveUsers.slice(1, 31).reverse().map((d) => d.has_profile), color: '#22d3ee', fill: false },
-	{ label: 'With Follows', data: dailyActiveUsers.slice(1, 31).reverse().map((d) => d.has_follows_list), color: '#34d399', fill: false },
-	{ label: 'Profile + Follows', data: dailyActiveUsers.slice(1, 31).reverse().map((d) => d.has_profile_and_follows_list), color: '#fbbf24', fill: false },
+	{ label: 'Publishing Users', data: dailyActiveUsers.slice(1, 31).reverse().map((d) => d.active_users), color: '#56b4e9', fill: true },
+	{ label: 'With Profile', data: dailyActiveUsers.slice(1, 31).reverse().map((d) => d.has_profile), color: '#e69f00', fill: false },
+	{ label: 'With Follows', data: dailyActiveUsers.slice(1, 31).reverse().map((d) => d.has_follows_list), color: '#cc79a7', fill: false },
+	{ label: 'Profile + Follows', data: dailyActiveUsers.slice(1, 31).reverse().map((d) => d.has_profile_and_follows_list), color: '#009e73', fill: false },
 ])
 
 // WAU breakdown chart - skip index 0 (current incomplete week), show last 24 complete weeks
@@ -116,10 +226,10 @@ const wauChartLabels = $derived(
 )
 
 const wauChartData = $derived([
-	{ label: 'Publishing Users', data: weeklyActiveUsers.slice(1, 25).reverse().map((d) => d.active_users), color: '#22d3ee', fill: true },
-	{ label: 'With Profile', data: weeklyActiveUsers.slice(1, 25).reverse().map((d) => d.has_profile), color: '#a78bfa', fill: false },
-	{ label: 'With Follows', data: weeklyActiveUsers.slice(1, 25).reverse().map((d) => d.has_follows_list), color: '#34d399', fill: false },
-	{ label: 'Profile + Follows', data: weeklyActiveUsers.slice(1, 25).reverse().map((d) => d.has_profile_and_follows_list), color: '#fbbf24', fill: false },
+	{ label: 'Publishing Users', data: weeklyActiveUsers.slice(1, 25).reverse().map((d) => d.active_users), color: '#56b4e9', fill: true },
+	{ label: 'With Profile', data: weeklyActiveUsers.slice(1, 25).reverse().map((d) => d.has_profile), color: '#e69f00', fill: false },
+	{ label: 'With Follows', data: weeklyActiveUsers.slice(1, 25).reverse().map((d) => d.has_follows_list), color: '#cc79a7', fill: false },
+	{ label: 'Profile + Follows', data: weeklyActiveUsers.slice(1, 25).reverse().map((d) => d.has_profile_and_follows_list), color: '#009e73', fill: false },
 ])
 
 // MAU breakdown chart - skip index 0 (current incomplete month), show last 24 complete months
@@ -131,10 +241,10 @@ const mauChartLabels = $derived(
 )
 
 const mauChartData = $derived([
-	{ label: 'Publishing Users', data: monthlyActiveUsers.slice(1, 25).reverse().map((d) => d.active_users), color: '#f472b6', fill: true },
-	{ label: 'With Profile', data: monthlyActiveUsers.slice(1, 25).reverse().map((d) => d.has_profile), color: '#a78bfa', fill: false },
-	{ label: 'With Follows', data: monthlyActiveUsers.slice(1, 25).reverse().map((d) => d.has_follows_list), color: '#34d399', fill: false },
-	{ label: 'Profile + Follows', data: monthlyActiveUsers.slice(1, 25).reverse().map((d) => d.has_profile_and_follows_list), color: '#fbbf24', fill: false },
+	{ label: 'Publishing Users', data: monthlyActiveUsers.slice(1, 25).reverse().map((d) => d.active_users), color: '#56b4e9', fill: true },
+	{ label: 'With Profile', data: monthlyActiveUsers.slice(1, 25).reverse().map((d) => d.has_profile), color: '#e69f00', fill: false },
+	{ label: 'With Follows', data: monthlyActiveUsers.slice(1, 25).reverse().map((d) => d.has_follows_list), color: '#cc79a7', fill: false },
+	{ label: 'Profile + Follows', data: monthlyActiveUsers.slice(1, 25).reverse().map((d) => d.has_profile_and_follows_list), color: '#009e73', fill: false },
 ])
 
 // Daily events stacked bar chart
@@ -211,7 +321,7 @@ const newUsersLabels = $derived(
 )
 
 const newUsersData = $derived([
-	{ label: 'New Users', data: newUsers.slice(1, 31).reverse().map((d) => d.new_users), color: '#34d399', fill: true },
+	{ label: 'New Users', data: newUsers.slice(1, 31).reverse().map((d) => d.new_users), color: '#009e73', fill: true },
 ])
 
 // Hourly activity chart data (bar chart for hours 0-23)
@@ -220,7 +330,7 @@ const hourlyLabels = $derived(
 )
 
 const hourlyData = $derived([
-	{ label: 'Avg Events/Day', data: hourlyActivity.map((d) => d.avg_per_day), color: '#f472b6', fill: true },
+	{ label: 'Avg Events/Day', data: hourlyActivity.map((d) => d.avg_per_day), color: '#cc79a7', fill: true },
 ])
 
 // Zaps chart data
@@ -234,8 +344,8 @@ const zapsLabels = $derived(
 
 // Combined zaps chart with dual axes (sats on left, count on right)
 const zapsCombinedData = $derived([
-	{ label: 'Total Sats', data: zapsByDay.slice(1, 31).reverse().map((d) => d.total_sats), color: '#fbbf24', fill: true },
-	{ label: 'Zap Count', data: zapsByDay.slice(1, 31).reverse().map((d) => d.total_zaps), color: '#fb7185', fill: false },
+	{ label: 'Total Sats', data: zapsByDay.slice(1, 31).reverse().map((d) => d.total_sats), color: '#f0e442', fill: true },
+	{ label: 'Zap Count', data: zapsByDay.slice(1, 31).reverse().map((d) => d.total_zaps), color: '#d55e00', fill: false },
 ])
 
 // Zap histogram chart data
@@ -244,7 +354,7 @@ const histogramLabels = $derived(
 )
 
 const histogramData = $derived([
-	{ label: 'Zap Count', data: zapHistogram.map((b) => b.count), color: '#fbbf24', fill: true },
+	{ label: 'Zap Count', data: zapHistogram.map((b) => b.count), color: '#e69f00', fill: true },
 ])
 
 // Helper to safely fetch with fallback
@@ -444,6 +554,19 @@ async function loadTopKinds() {
 	}
 }
 
+async function loadRelayDistribution() {
+	relayDistributionLoading = true
+	try {
+		relayDistribution = await getRelayDistribution(50)
+		// Kick off non-blocking reachability checks
+		checkAllRelays()
+	} catch (e) {
+		console.warn('Relay distribution failed:', e)
+	} finally {
+		relayDistributionLoading = false
+	}
+}
+
 // Load all data in parallel - each section loads independently
 async function loadAllData() {
 	globalError = null
@@ -464,6 +587,7 @@ async function loadAllData() {
 		loadHourlyActivity(),
 		loadDailyEvents(),
 		loadTopKinds(),
+		loadRelayDistribution(),
 	])
 }
 
@@ -472,7 +596,7 @@ const isAnyLoading = $derived(
 	headerLoading || dauChartLoading || wauChartLoading ||
 	mauChartLoading || newUsersLoading || retentionLoading || zapsSummaryLoading ||
 	zapsChartLoading || zapsHistogramLoading || engagementLoading || throughputLoading ||
-	hourlyActivityLoading || dailyEventsLoading || topKindsLoading
+	hourlyActivityLoading || dailyEventsLoading || topKindsLoading || relayDistributionLoading
 )
 
 onMount(() => {
@@ -718,9 +842,10 @@ onMount(() => {
 										</td>
 										<td class="py-1 px-1 sm:px-2 text-right font-mono text-slate-400">{formatNumber(cohort.cohort_size)}</td>
 										{#each cohort.retention_pct.slice(0, 8) as pct, i}
+											{@const colors = getHeatmapColor(pct)}
 											<td
-												class="py-1 px-1 sm:px-2 text-right font-mono"
-												style="background-color: rgba(139, 92, 246, {Math.min(pct / 100, 1) * 0.5}); color: {pct > 50 ? '#fff' : pct > 20 ? '#c4b5fd' : '#94a3b8'}"
+												class="py-1 px-1 sm:px-2 text-right font-mono font-medium"
+												style="background-color: {colors.bg}; color: {colors.text}"
 											>
 												{pct.toFixed(0)}%
 											</td>
@@ -734,7 +859,7 @@ onMount(() => {
 						</table>
 					</div>
 					<div class="mt-2 text-[9px] sm:text-[10px] text-slate-500">
-						W0 = first week (always 100%), W1+ = subsequent weeks. Darker = higher retention.
+						W0 = first week (always 100%), W1+ = subsequent weeks. Blue → Yellow/Orange = higher retention.
 					</div>
 				</div>
 			{/if}
@@ -813,6 +938,61 @@ onMount(() => {
 				<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-2.5">
 					<h3 class="mb-1.5 text-xs font-semibold text-slate-400">Zap Amount Distribution (30d)<InfoTooltip text="Distribution of zap amounts by bucket. Shows how many zaps fall into each sats range (e.g., 1–10 sats, 11–100 sats, etc.)." /></h3>
 					<Chart labels={histogramLabels} datasets={histogramData} type="bar" height={180} />
+				</div>
+			{/if}
+		</section>
+
+		<!-- Relay Distribution Section -->
+		<section class="mb-6">
+			<h2 class="mb-3 flex items-center gap-2 border-b border-sky-500/30 pb-2 text-sm sm:text-base font-bold uppercase tracking-wider text-sky-400">
+				<span>📡</span> Relay Distribution
+			</h2>
+
+			{#if relayDistributionLoading}
+				<LoadingSkeleton type="table" rows={10} />
+			{:else if relayDistribution.length > 0}
+				<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-2.5">
+					<h3 class="mb-1.5 text-xs font-semibold text-slate-400">Top Relays by User Count<InfoTooltip text="Relay popularity based on NIP-65 relay lists (kind 10002). Shows how many users have each relay in their outbox model configuration. Read = users who read from this relay, Write = users who write to this relay." /></h3>
+					<div class="overflow-x-auto -mx-2.5 px-2.5">
+						<table class="w-full text-xs">
+							<thead>
+								<tr class="border-b border-slate-700/50 text-left text-[10px] uppercase tracking-wider text-slate-500">
+									<th class="py-1.5 pr-3">#</th>
+									<th class="py-1.5 pr-1 text-center">Status</th>
+									<th class="py-1.5 pr-3">Relay</th>
+									<th class="py-1.5 px-2 text-right">Users</th>
+									<th class="py-1.5 px-2 text-right">Read</th>
+									<th class="py-1.5 px-2 text-right">Write</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each relayDistribution as relay, i}
+									{@const status = relayStatus.get(relay.relay_url) ?? 'checking'}
+									<tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
+										<td class="py-1.5 pr-3 text-slate-500 font-mono">{i + 1}</td>
+										<td class="py-1.5 pr-1 text-center">
+											{#if status === 'checking'}
+												<span class="inline-block w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Checking..."></span>
+											{:else if status === 'reachable'}
+												<span class="inline-block w-2 h-2 rounded-full bg-green-400" title="Reachable"></span>
+											{:else}
+												<span class="inline-block w-2 h-2 rounded-full bg-red-400" title="Unreachable"></span>
+											{/if}
+										</td>
+										<td class="py-1.5 pr-3 font-mono text-sky-400 text-[11px] truncate max-w-[200px] sm:max-w-[300px]" title={relay.relay_url}>
+											{relay.relay_url.replace('wss://', '')}
+										</td>
+										<td class="py-1.5 px-2 text-right font-mono text-slate-300">{formatNumber(relay.user_count)}</td>
+										<td class="py-1.5 px-2 text-right font-mono text-slate-400">{formatNumber(relay.read_count)}</td>
+										<td class="py-1.5 px-2 text-right font-mono text-slate-400">{formatNumber(relay.write_count)}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<div class="mt-2 text-[10px] text-slate-500">
+						Based on latest NIP-65 relay list (kind 10002) per user. Data refreshed every 6 hours.
+					</div>
 				</div>
 			{/if}
 		</section>
