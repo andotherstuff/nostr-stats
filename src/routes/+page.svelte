@@ -91,6 +91,8 @@ let relayDistribution = $state<RelayDistributionRow[]>([])
 let relayStatus = $state<Map<string, 'checking' | 'reachable' | 'unreachable'>>(new Map())
 
 // Check if a relay is reachable via WebSocket (non-blocking)
+// Note: Browser console will still show connection errors for unreachable relays -
+// these cannot be suppressed from JavaScript as they're logged by the browser's networking layer
 function checkRelayReachability(relayUrl: string): void {
 	relayStatus.set(relayUrl, 'checking')
 	relayStatus = new Map(relayStatus) // Trigger reactivity
@@ -98,26 +100,35 @@ function checkRelayReachability(relayUrl: string): void {
 	const timeout = 5000 // 5 second timeout
 	let ws: WebSocket | null = null
 	let timeoutId: ReturnType<typeof setTimeout> | null = null
+	let settled = false
 
 	const cleanup = () => {
+		if (settled) return
+		settled = true
 		if (timeoutId) clearTimeout(timeoutId)
 		if (ws) {
 			ws.onopen = null
 			ws.onerror = null
 			ws.onclose = null
-			if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-				ws.close()
+			try {
+				if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+					ws.close()
+				}
+			} catch {
+				// Ignore close errors
 			}
 		}
 	}
 
 	const markReachable = () => {
+		if (settled) return
 		cleanup()
 		relayStatus.set(relayUrl, 'reachable')
 		relayStatus = new Map(relayStatus)
 	}
 
 	const markUnreachable = () => {
+		if (settled) return
 		cleanup()
 		relayStatus.set(relayUrl, 'unreachable')
 		relayStatus = new Map(relayStatus)
@@ -126,7 +137,11 @@ function checkRelayReachability(relayUrl: string): void {
 	try {
 		ws = new WebSocket(relayUrl)
 		ws.onopen = markReachable
-		ws.onerror = markUnreachable
+		ws.onerror = () => markUnreachable() // Wrap to swallow event object
+		ws.onclose = (e) => {
+			// If closed without ever opening successfully, mark unreachable
+			if (!settled && e.code !== 1000) markUnreachable()
+		}
 		timeoutId = setTimeout(markUnreachable, timeout)
 	} catch {
 		markUnreachable()
@@ -1097,6 +1112,11 @@ onMount(() => {
 			{/if}
 		</section>
 	</div>
+
+	<!-- Footer -->
+	<footer class="mt-8 border-t border-slate-800 py-6 text-center text-sm text-slate-500">
+		Nostr Stats is an <a href="https://andotherstuff.org" class="text-violet-400 hover:text-violet-300 hover:underline" target="_blank" rel="noopener noreferrer">And Other Stuff</a> project. Built and maintained by <a href="https://primal.net/jeffg" class="text-violet-400 hover:text-violet-300 hover:underline" target="_blank" rel="noopener noreferrer">JeffG</a>.
+	</footer>
 </div>
 
 <style>
