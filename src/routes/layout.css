@@ -24,6 +24,8 @@
 
 html {
 	scroll-behavior: smooth;
+	/* Increase base font size by 1.25x (16px -> 20px) */
+	font-size: 125%;
 }
 
 body {

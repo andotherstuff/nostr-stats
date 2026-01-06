@@ -58,6 +58,7 @@ let mauChartLoading = $state(true)
 let newUsersLoading = $state(true)
 let newUsersChartLoading = $state(true)
 let retentionLoading = $state(true)
+let monthlyRetentionLoading = $state(true)
 let zapsSummaryLoading = $state(true)
 let zapsChartLoading = $state(true)
 let zapsHistogramLoading = $state(true)
@@ -77,8 +78,13 @@ let topKinds = $state<KindSummary[]>([])
 let kindActivityData = $state<Map<number, KindActivityRow[]>>(new Map())
 let throughput = $state<ThroughputStats | null>(null)
 let newUsers = $state<NewUsersRow[]>([])
+let newUsersWeekly = $state<NewUsersRow[]>([])
+let newUsersMonthly = $state<NewUsersRow[]>([])
 let retention = $state<RetentionCohort[]>([])
+let monthlyRetention = $state<RetentionCohort[]>([])
 let hourlyActivity = $state<HourlyActivityRow[]>([])
+let hourlyActivityByKind = $state<Map<number | 'all', HourlyActivityRow[]>>(new Map())
+let hourlyActivityTab = $state<'all' | 1 | 0 | 3 | 6 | 7 | 9735>('all')
 let zapStats30d = $state<ZapStatsAggregate | null>(null)
 let zapStats90d = $state<ZapStatsAggregate | null>(null)
 let zapStatsAllTime = $state<ZapStatsAggregate | null>(null)
@@ -89,6 +95,9 @@ let relayDistribution = $state<RelayDistributionRow[]>([])
 
 // Relay reachability status: 'checking' | 'reachable' | 'unreachable'
 let relayStatus = $state<Map<string, 'checking' | 'reachable' | 'unreachable'>>(new Map())
+
+// Retention tab state
+let retentionTab = $state<'weekly' | 'monthly'>('weekly')
 
 // Check if a relay is reachable via WebSocket (non-blocking)
 // Note: Browser console will still show connection errors for unreachable relays -
@@ -325,6 +334,26 @@ const lastCompleteDay = $derived(dailyActiveUsers.length > 1 ? dailyActiveUsers[
 const lastCompleteWeek = $derived(weeklyActiveUsers.length > 1 ? weeklyActiveUsers[1] : null)
 const lastCompleteMonth = $derived(monthlyActiveUsers.length > 1 ? monthlyActiveUsers[1] : null)
 
+// Calculate % changes for new users (comparing last complete period vs previous)
+const newUsersDailyChange = $derived(() => {
+	if (newUsers.length < 3) return null
+	return percentChange(newUsers[1]?.new_users ?? 0, newUsers[2]?.new_users ?? 0)
+})
+
+const newUsersWeeklyChange = $derived(() => {
+	if (newUsers.length < 15) return null
+	const thisWeek = newUsers.slice(1, 8).reduce((a, b) => a + b.new_users, 0)
+	const lastWeek = newUsers.slice(8, 15).reduce((a, b) => a + b.new_users, 0)
+	return percentChange(thisWeek, lastWeek)
+})
+
+const newUsersMonthlyChange = $derived(() => {
+	if (newUsers.length < 61) return null
+	const thisMonth = newUsers.slice(1, 31).reduce((a, b) => a + b.new_users, 0)
+	const lastMonth = newUsers.slice(31, 61).reduce((a, b) => a + b.new_users, 0)
+	return percentChange(thisMonth, lastMonth)
+})
+
 
 // New users chart data
 // Skip index 0 (current incomplete day), show last 30 complete days
@@ -339,6 +368,30 @@ const newUsersData = $derived([
 	{ label: 'New Users', data: newUsers.slice(1, 31).reverse().map((d) => d.new_users), color: '#009e73', fill: true },
 ])
 
+// Weekly new users chart data - skip index 0 (current incomplete week), show last 24 complete weeks
+const newUsersWeeklyLabels = $derived(
+	newUsersWeekly.slice(1, 25).reverse().map((d) => {
+		const date = new Date(d.period)
+		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+	})
+)
+
+const newUsersWeeklyData = $derived([
+	{ label: 'New Users', data: newUsersWeekly.slice(1, 25).reverse().map((d) => d.new_users), color: '#10b981', fill: true },
+])
+
+// Monthly new users chart data - skip index 0 (current incomplete month), show last 24 complete months
+const newUsersMonthlyLabels = $derived(
+	newUsersMonthly.slice(1, 25).reverse().map((d) => {
+		const date = new Date(d.period)
+		return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+	})
+)
+
+const newUsersMonthlyData = $derived([
+	{ label: 'New Users', data: newUsersMonthly.slice(1, 25).reverse().map((d) => d.new_users), color: '#22c55e', fill: true },
+])
+
 // Hourly activity chart data (bar chart for hours 0-23)
 const hourlyLabels = $derived(
 	hourlyActivity.map((d) => `${d.hour.toString().padStart(2, '0')}:00`)
@@ -347,6 +400,81 @@ const hourlyLabels = $derived(
 const hourlyData = $derived([
 	{ label: 'Avg Events/Day', data: hourlyActivity.map((d) => d.avg_per_day), color: '#cc79a7', fill: true },
 ])
+
+// Hourly activity data for the selected kind tab
+const selectedHourlyActivity = $derived(() => {
+	return hourlyActivityByKind.get(hourlyActivityTab) ?? hourlyActivity
+})
+
+const selectedHourlyLabels = $derived(() => {
+	const data = selectedHourlyActivity()
+	return data.map((d) => `${d.hour.toString().padStart(2, '0')}:00`)
+})
+
+const selectedHourlyData = $derived(() => {
+	const data = selectedHourlyActivity()
+	const kindName = hourlyActivityTab === 'all' ? 'All Events' : `Kind ${hourlyActivityTab}`
+	return [{ label: `${kindName} Avg/Day`, data: data.map((d) => d.avg_per_day), color: '#cc79a7', fill: true }]
+})
+
+// Kind names for tabs
+const HOURLY_TAB_LABELS: Record<'all' | 1 | 0 | 3 | 6 | 7 | 9735, string> = {
+	all: 'All',
+	1: 'Notes',
+	0: 'Profiles',
+	3: 'Follows',
+	6: 'Reposts',
+	7: 'Reactions',
+	9735: 'Zaps',
+}
+
+// Weekly retention chart data - each cohort as a line, weeks on x-axis
+const weeklyRetentionLabels = $derived(() => {
+	const maxWeeks = Math.min(8, Math.max(...retention.map((r) => r.retention_pct.length), 0))
+	return Array.from({ length: maxWeeks }, (_, i) => `W${i}`)
+})
+
+// Extended color palette for 12 cohort lines
+const COHORT_COLORS = [
+	'#56b4e9', // sky blue
+	'#e69f00', // orange
+	'#cc79a7', // reddish purple/pink
+	'#009e73', // bluish green
+	'#f0e442', // yellow
+	'#0072b2', // blue
+	'#d55e00', // vermillion/red-orange
+	'#88ccee', // light blue
+	'#ddcc77', // sand/tan
+	'#44aa99', // teal
+	'#aa4499', // purple
+	'#882255', // wine
+]
+
+const weeklyRetentionChartData = $derived(() => {
+	// Show all 12 cohorts to match the table
+	return retention.slice(0, 12).map((cohort, idx) => ({
+		label: new Date(cohort.cohort).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+		data: cohort.retention_pct.slice(0, 8),
+		color: COHORT_COLORS[idx % COHORT_COLORS.length],
+		fill: false,
+	}))
+})
+
+// Monthly retention chart data
+const monthlyRetentionLabels = $derived(() => {
+	const maxMonths = Math.min(8, Math.max(...monthlyRetention.map((r) => r.retention_pct.length), 0))
+	return Array.from({ length: maxMonths }, (_, i) => `M${i}`)
+})
+
+const monthlyRetentionChartData = $derived(() => {
+	// Show all 12 cohorts to match the table
+	return monthlyRetention.slice(0, 12).map((cohort, idx) => ({
+		label: new Date(cohort.cohort).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+		data: cohort.retention_pct.slice(0, 8),
+		color: COHORT_COLORS[idx % COHORT_COLORS.length],
+		fill: false,
+	}))
+})
 
 // Zaps chart data
 // Zaps chart - skip index 0 (current incomplete day), show last 30 complete days
@@ -444,7 +572,14 @@ async function loadNewUsers() {
 	newUsersLoading = true
 	newUsersChartLoading = true
 	try {
-		newUsers = await getNewUsers('day', 92)
+		const [daily, weekly, monthly] = await Promise.all([
+			getNewUsers('day', 92),
+			getNewUsers('week', 26),
+			getNewUsers('month', 24),
+		])
+		newUsers = daily
+		newUsersWeekly = weekly
+		newUsersMonthly = monthly
 	} catch (e) {
 		console.warn('New users failed:', e)
 	} finally {
@@ -455,12 +590,19 @@ async function loadNewUsers() {
 
 async function loadRetention() {
 	retentionLoading = true
+	monthlyRetentionLoading = true
 	try {
-		retention = await getUserRetention('week', 12)
+		const [weeklyData, monthlyData] = await Promise.all([
+			getUserRetention('week', 12),
+			getUserRetention('month', 12),
+		])
+		retention = weeklyData
+		monthlyRetention = monthlyData
 	} catch (e) {
 		console.warn('Retention failed:', e)
 	} finally {
 		retentionLoading = false
+		monthlyRetentionLoading = false
 	}
 }
 
@@ -529,7 +671,18 @@ async function loadThroughput() {
 async function loadHourlyActivity() {
 	hourlyActivityLoading = true
 	try {
-		hourlyActivity = await getHourlyActivity(7)
+		// Load hourly activity for all events and specific kinds
+		const kinds = [1, 0, 3, 6, 7, 9735] as const
+		const [allActivity, ...kindActivities] = await Promise.all([
+			getHourlyActivity(7),
+			...kinds.map((k) => safeFetch(getHourlyActivity(7, k), [])),
+		])
+		hourlyActivity = allActivity
+
+		const activityMap = new Map<number | 'all', HourlyActivityRow[]>()
+		activityMap.set('all', allActivity)
+		kinds.forEach((k, i) => activityMap.set(k, kindActivities[i]))
+		hourlyActivityByKind = activityMap
 	} catch (e) {
 		console.warn('Hourly activity failed:', e)
 	} finally {
@@ -609,7 +762,7 @@ async function loadAllData() {
 // Check if any section is still loading
 const isAnyLoading = $derived(
 	headerLoading || dauChartLoading || wauChartLoading ||
-	mauChartLoading || newUsersLoading || retentionLoading || zapsSummaryLoading ||
+	mauChartLoading || newUsersLoading || retentionLoading || monthlyRetentionLoading || zapsSummaryLoading ||
 	zapsChartLoading || zapsHistogramLoading || engagementLoading || throughputLoading ||
 	hourlyActivityLoading || dailyEventsLoading || topKindsLoading || relayDistributionLoading
 )
@@ -624,6 +777,23 @@ onMount(() => {
 <svelte:head>
 	<title>Nostr Stats</title>
 	<meta name="description" content="Real-time analytics for the Nostr network" />
+
+	<!-- Open Graph (Facebook, LinkedIn, Discord, etc.) -->
+	<meta property="og:type" content="website" />
+	<meta property="og:title" content="Nostr Stats" />
+	<meta property="og:description" content="Real-time analytics for the Nostr network" />
+	<meta property="og:url" content="https://stats.andotherstuff.org" />
+	<meta property="og:image" content="https://stats.andotherstuff.org/og-image.png" />
+	<meta property="og:site_name" content="Nostr Stats" />
+
+	<!-- Twitter/X Card -->
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:url" content="https://stats.andotherstuff.org" />
+	<meta name="twitter:title" content="Nostr Stats" />
+	<meta name="twitter:description" content="Real-time analytics for the Nostr network" />
+	<meta name="twitter:image" content="https://stats.andotherstuff.org/og-image.png" />
+
+	<!-- Fonts -->
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
 	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -640,8 +810,9 @@ onMount(() => {
 		<!-- Header -->
 		<header class="mb-3">
 			<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-				<h1 class="text-xl font-bold tracking-tight">
-					<span class="bg-gradient-to-r from-violet-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">Nostr</span> Stats
+				<h1 class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-200">
+					<img src="/logo/SVG/Mark Color on Dark.svg" alt="Nostr Stats" class="h-7 w-7" />
+					<span>Nostr Stats</span>
 				</h1>
 				<div class="flex items-center gap-2 sm:gap-3 text-xs order-last sm:order-none w-full sm:w-auto">
 					{#if headerLoading}
@@ -674,70 +845,68 @@ onMount(() => {
 			</div>
 		{/if}
 
-		<!-- Users Section -->
-		<section class="mb-6">
-			<h2 class="mb-3 border-b border-violet-500/30 pb-2">
-				<div class="flex items-center gap-2 text-base font-bold uppercase tracking-wider text-violet-400">
-					<span>👤</span> Publishing Users
-				</div>
-				<div class="mt-1 text-[10px] font-normal normal-case tracking-normal text-slate-500">Excludes single-use keys (gift wraps, Marmot)</div>
+		<!-- Publishing Users Section -->
+		<section class="mb-12">
+			<h2 class="mb-4">
+				<div class="text-2xl sm:text-3xl font-bold tracking-tight text-violet-400">Publishing Users</div>
+				<div class="mt-1 text-xs font-normal text-slate-500">Users publishing events, excludes single-use keys (gift wraps, Marmot)</div>
 			</h2>
 
 			<!-- Active Users Summary (last complete period) -->
 			{#if dauChartLoading || wauChartLoading || mauChartLoading}
-				<div class="mb-2">
+				<div class="mb-3">
 					<LoadingSkeleton type="stat-row" />
 				</div>
 			{:else if lastCompleteDay && lastCompleteWeek && lastCompleteMonth}
-				<div class="mb-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-					<div class="rounded-lg border border-violet-500/20 bg-slate-900/50 p-2.5">
-						<div class="flex items-center justify-between text-xs text-slate-400">
-							<span>Yesterday<InfoTooltip text="Unique pubkeys that published at least one event yesterday (last complete day). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
+				<div class="mb-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+					<div class="rounded-lg border border-violet-500/20 bg-slate-900/50 p-3">
+						<div class="flex items-center justify-between text-sm text-slate-400">
+							<span>Publishing Yesterday<InfoTooltip text="Unique pubkeys that published at least one event yesterday (last complete day). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
 							<span class="rounded bg-violet-500/20 px-1.5 py-0.5 text-violet-400">DPU</span>
 						</div>
-						<div class="mt-1 flex items-baseline gap-2">
-							<span class="font-mono text-2xl font-bold text-violet-400">{formatNumber(lastCompleteDay.active_users)}</span>
+						<div class="mt-1.5 flex items-baseline gap-2">
+							<span class="font-mono text-3xl font-bold text-violet-400">{formatNumber(lastCompleteDay.active_users)}</span>
 							{#if dauChange() !== null}
-								<span class="text-xs {dauChange()! >= 0 ? 'text-emerald-400' : 'text-rose-400'}">{formatPercent(dauChange()!)}</span>
+								<span class="text-sm {dauChange()! >= 0 ? 'text-emerald-400' : 'text-rose-400'}">{formatPercent(dauChange()!)}</span>
 							{/if}
 						</div>
-						<div class="mt-1 text-xs text-slate-500 space-y-0.5">
+						<div class="mt-2 text-sm text-slate-500 space-y-1">
 							<div class="flex justify-between"><span>w/ profile</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteDay.has_profile)}</span></div>
 							<div class="flex justify-between"><span>w/ follows</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteDay.has_follows_list)}</span></div>
 							<div class="flex justify-between"><span>w/ both</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteDay.has_profile_and_follows_list)}</span></div>
 						</div>
 					</div>
 
-					<div class="rounded-lg border border-cyan-500/20 bg-slate-900/50 p-2.5">
-						<div class="flex items-center justify-between text-xs text-slate-400">
-							<span>Last Week<InfoTooltip text="Unique pubkeys that published at least one event last week (last complete 7-day period). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
+					<div class="rounded-lg border border-cyan-500/20 bg-slate-900/50 p-3">
+						<div class="flex items-center justify-between text-sm text-slate-400">
+							<span>Publishing Last Week<InfoTooltip text="Unique pubkeys that published at least one event last week (last complete 7-day period). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
 							<span class="rounded bg-cyan-500/20 px-1.5 py-0.5 text-cyan-400">WPU</span>
 						</div>
-						<div class="mt-1 flex items-baseline gap-2">
-							<span class="font-mono text-2xl font-bold text-cyan-400">{formatNumber(lastCompleteWeek.active_users)}</span>
+						<div class="mt-1.5 flex items-baseline gap-2">
+							<span class="font-mono text-3xl font-bold text-cyan-400">{formatNumber(lastCompleteWeek.active_users)}</span>
 							{#if wauChange() !== null}
-								<span class="text-xs {wauChange()! >= 0 ? 'text-emerald-400' : 'text-rose-400'}">{formatPercent(wauChange()!)}</span>
+								<span class="text-sm {wauChange()! >= 0 ? 'text-emerald-400' : 'text-rose-400'}">{formatPercent(wauChange()!)}</span>
 							{/if}
 						</div>
-						<div class="mt-1 text-xs text-slate-500 space-y-0.5">
+						<div class="mt-2 text-sm text-slate-500 space-y-1">
 							<div class="flex justify-between"><span>w/ profile</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteWeek.has_profile)}</span></div>
 							<div class="flex justify-between"><span>w/ follows</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteWeek.has_follows_list)}</span></div>
 							<div class="flex justify-between"><span>w/ both</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteWeek.has_profile_and_follows_list)}</span></div>
 						</div>
 					</div>
 
-					<div class="rounded-lg border border-pink-500/20 bg-slate-900/50 p-2.5">
-						<div class="flex items-center justify-between text-xs text-slate-400">
-							<span>Last Month<InfoTooltip text="Unique pubkeys that published at least one event last month (last complete calendar month). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
+					<div class="rounded-lg border border-pink-500/20 bg-slate-900/50 p-3">
+						<div class="flex items-center justify-between text-sm text-slate-400">
+							<span>Publishing Last Month<InfoTooltip text="Unique pubkeys that published at least one event last month (last complete calendar month). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
 							<span class="rounded bg-pink-500/20 px-1.5 py-0.5 text-pink-400">MPU</span>
 						</div>
-						<div class="mt-1 flex items-baseline gap-2">
-							<span class="font-mono text-2xl font-bold text-pink-400">{formatNumber(lastCompleteMonth.active_users)}</span>
+						<div class="mt-1.5 flex items-baseline gap-2">
+							<span class="font-mono text-3xl font-bold text-pink-400">{formatNumber(lastCompleteMonth.active_users)}</span>
 							{#if mauChange() !== null}
-								<span class="text-xs {mauChange()! >= 0 ? 'text-emerald-400' : 'text-rose-400'}">{formatPercent(mauChange()!)}</span>
+								<span class="text-sm {mauChange()! >= 0 ? 'text-emerald-400' : 'text-rose-400'}">{formatPercent(mauChange()!)}</span>
 							{/if}
 						</div>
-						<div class="mt-1 text-xs text-slate-500 space-y-0.5">
+						<div class="mt-2 text-sm text-slate-500 space-y-1">
 							<div class="flex justify-between"><span>w/ profile</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteMonth.has_profile)}</span></div>
 							<div class="flex justify-between"><span>w/ follows</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteMonth.has_follows_list)}</span></div>
 							<div class="flex justify-between"><span>w/ both</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteMonth.has_profile_and_follows_list)}</span></div>
@@ -747,71 +916,94 @@ onMount(() => {
 			{/if}
 
 			<!-- Individual DAU/WAU/MAU Breakdown Charts -->
-			<div class="mb-2 grid gap-2 md:grid-cols-3">
+			<div class="grid gap-3 md:grid-cols-3">
 				{#if dauChartLoading}
 					<LoadingSkeleton type="chart" height={180} />
 				{:else if dailyActiveUsers.length > 0}
-					<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-2.5">
-						<h3 class="mb-1.5 text-xs font-semibold text-slate-400">Daily Publishing Users (30d)<InfoTooltip text="Unique pubkeys that published at least one event during each 24-hour period. Excludes kinds published with single-use keys (gift wraps—kind 1059, Marmot messages—kind 445)." /></h3>
+					<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+						<h3 class="mb-2 text-sm font-semibold text-slate-400">Daily Publishing Users (30d)<InfoTooltip text="Unique pubkeys that published at least one event during each 24-hour period. Excludes kinds published with single-use keys (gift wraps—kind 1059, Marmot messages—kind 445)." /></h3>
 						<Chart labels={dauChartLabels} datasets={dauChartData} height={180} />
 					</div>
 				{/if}
 				{#if wauChartLoading}
 					<LoadingSkeleton type="chart" height={180} />
 				{:else if weeklyActiveUsers.length > 0}
-					<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-2.5">
-						<h3 class="mb-1.5 text-xs font-semibold text-slate-400">Weekly Publishing Users (24w)<InfoTooltip text="Unique pubkeys that published at least one event during each 7-day period. Excludes kinds published with single-use keys (gift wraps—kind 1059, Marmot messages—kind 445)." /></h3>
+					<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+						<h3 class="mb-2 text-sm font-semibold text-slate-400">Weekly Publishing Users (24w)<InfoTooltip text="Unique pubkeys that published at least one event during each 7-day period. Excludes kinds published with single-use keys (gift wraps—kind 1059, Marmot messages—kind 445)." /></h3>
 						<Chart labels={wauChartLabels} datasets={wauChartData} height={180} />
 					</div>
 				{/if}
 				{#if mauChartLoading}
 					<LoadingSkeleton type="chart" height={180} />
 				{:else if monthlyActiveUsers.length > 0}
-					<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-2.5">
-						<h3 class="mb-1.5 text-xs font-semibold text-slate-400">Monthly Publishing Users (24m)<InfoTooltip text="Unique pubkeys that published at least one event during each 30-day period. Excludes kinds published with single-use keys (gift wraps—kind 1059, Marmot messages—kind 445)." /></h3>
+					<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+						<h3 class="mb-2 text-sm font-semibold text-slate-400">Monthly Publishing Users (24m)<InfoTooltip text="Unique pubkeys that published at least one event during each 30-day period. Excludes kinds published with single-use keys (gift wraps—kind 1059, Marmot messages—kind 445)." /></h3>
 						<Chart labels={mauChartLabels} datasets={mauChartData} height={180} />
 					</div>
 				{/if}
 			</div>
+		</section>
+
+		<!-- New Users Section -->
+		<section class="mb-12">
+			<h2 class="mb-4">
+				<div class="text-2xl sm:text-3xl font-bold tracking-tight text-teal-400">New Users</div>
+				<div class="mt-1 text-xs font-normal text-slate-500">First-time pubkeys publishing events</div>
+			</h2>
 
 			<!-- New Users Summary (last complete periods) -->
 			{#if newUsersLoading}
-				<div class="mb-2">
+				<div class="mb-3">
 					<LoadingSkeleton type="stat-row" />
 				</div>
 			{:else if newUsers.length >= 91}
-				<div class="mb-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-					<div class="rounded-lg border border-teal-500/20 bg-slate-900/50 p-2.5">
-						<div class="flex items-center justify-between text-xs text-slate-400">
+				<div class="mb-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+					<div class="rounded-lg border border-teal-500/20 bg-slate-900/50 p-3">
+						<div class="flex items-center justify-between text-sm text-slate-400">
 							<span>New Yesterday<InfoTooltip text="First-time pubkeys seen publishing any event yesterday (last complete day). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys." /></span>
 							<span class="rounded bg-teal-500/20 px-1.5 py-0.5 text-teal-400">1d</span>
 						</div>
-						<div class="mt-1 font-mono text-2xl font-bold text-teal-400">{formatNumber(newUsers[1]?.new_users ?? 0)}</div>
-						<div class="mt-1 text-xs text-slate-500 space-y-0.5">
+						<div class="mt-1.5 flex items-baseline gap-2">
+							<span class="font-mono text-3xl font-bold text-teal-400">{formatNumber(newUsers[1]?.new_users ?? 0)}</span>
+							{#if newUsersDailyChange() !== null}
+								<span class="text-sm {newUsersDailyChange()! >= 0 ? 'text-emerald-400' : 'text-rose-400'}">{formatPercent(newUsersDailyChange()!)}</span>
+							{/if}
+						</div>
+						<div class="mt-2 text-sm text-slate-500 space-y-1">
 							<div class="flex justify-between"><span>2 days ago</span><span class="font-mono text-slate-400">{formatNumber(newUsers[2]?.new_users ?? 0)}</span></div>
 							<div class="flex justify-between"><span>3 days ago</span><span class="font-mono text-slate-400">{formatNumber(newUsers[3]?.new_users ?? 0)}</span></div>
 							<div class="flex justify-between"><span>7d avg</span><span class="font-mono text-slate-400">{formatNumber(Math.round(newUsers.slice(1, 8).reduce((a, b) => a + b.new_users, 0) / 7))}</span></div>
 						</div>
 					</div>
-					<div class="rounded-lg border border-emerald-500/20 bg-slate-900/50 p-2.5">
-						<div class="flex items-center justify-between text-xs text-slate-400">
+					<div class="rounded-lg border border-emerald-500/20 bg-slate-900/50 p-3">
+						<div class="flex items-center justify-between text-sm text-slate-400">
 							<span>New Last Week<InfoTooltip text="Total first-time pubkeys in the last complete 7-day period. Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys." /></span>
 							<span class="rounded bg-emerald-500/20 px-1.5 py-0.5 text-emerald-400">7d</span>
 						</div>
-						<div class="mt-1 font-mono text-2xl font-bold text-emerald-400">{formatNumber(newUsers.slice(1, 8).reduce((a, b) => a + b.new_users, 0))}</div>
-						<div class="mt-1 text-xs text-slate-500 space-y-0.5">
+						<div class="mt-1.5 flex items-baseline gap-2">
+							<span class="font-mono text-3xl font-bold text-emerald-400">{formatNumber(newUsers.slice(1, 8).reduce((a, b) => a + b.new_users, 0))}</span>
+							{#if newUsersWeeklyChange() !== null}
+								<span class="text-sm {newUsersWeeklyChange()! >= 0 ? 'text-emerald-400' : 'text-rose-400'}">{formatPercent(newUsersWeeklyChange()!)}</span>
+							{/if}
+						</div>
+						<div class="mt-2 text-sm text-slate-500 space-y-1">
 							<div class="flex justify-between"><span>prev week</span><span class="font-mono text-slate-400">{formatNumber(newUsers.slice(8, 15).reduce((a, b) => a + b.new_users, 0))}</span></div>
 							<div class="flex justify-between"><span>2 weeks ago</span><span class="font-mono text-slate-400">{formatNumber(newUsers.slice(15, 22).reduce((a, b) => a + b.new_users, 0))}</span></div>
 							<div class="flex justify-between"><span>daily avg</span><span class="font-mono text-slate-400">{formatNumber(Math.round(newUsers.slice(1, 8).reduce((a, b) => a + b.new_users, 0) / 7))}</span></div>
 						</div>
 					</div>
-					<div class="rounded-lg border border-lime-500/20 bg-slate-900/50 p-2.5">
-						<div class="flex items-center justify-between text-xs text-slate-400">
+					<div class="rounded-lg border border-lime-500/20 bg-slate-900/50 p-3">
+						<div class="flex items-center justify-between text-sm text-slate-400">
 							<span>New Last Month<InfoTooltip text="Total first-time pubkeys in the last complete 30-day period. Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys." /></span>
 							<span class="rounded bg-lime-500/20 px-1.5 py-0.5 text-lime-400">30d</span>
 						</div>
-						<div class="mt-1 font-mono text-2xl font-bold text-lime-400">{formatNumber(newUsers.slice(1, 31).reduce((a, b) => a + b.new_users, 0))}</div>
-						<div class="mt-1 text-xs text-slate-500 space-y-0.5">
+						<div class="mt-1.5 flex items-baseline gap-2">
+							<span class="font-mono text-3xl font-bold text-lime-400">{formatNumber(newUsers.slice(1, 31).reduce((a, b) => a + b.new_users, 0))}</span>
+							{#if newUsersMonthlyChange() !== null}
+								<span class="text-sm {newUsersMonthlyChange()! >= 0 ? 'text-emerald-400' : 'text-rose-400'}">{formatPercent(newUsersMonthlyChange()!)}</span>
+							{/if}
+						</div>
+						<div class="mt-2 text-sm text-slate-500 space-y-1">
 							<div class="flex justify-between"><span>prev month</span><span class="font-mono text-slate-400">{formatNumber(newUsers.slice(31, 61).reduce((a, b) => a + b.new_users, 0))}</span></div>
 							<div class="flex justify-between"><span>2 months ago</span><span class="font-mono text-slate-400">{formatNumber(newUsers.slice(61, 91).reduce((a, b) => a + b.new_users, 0))}</span></div>
 							<div class="flex justify-between"><span>daily avg</span><span class="font-mono text-slate-400">{formatNumber(Math.round(newUsers.slice(1, 31).reduce((a, b) => a + b.new_users, 0) / 30))}</span></div>
@@ -820,87 +1012,197 @@ onMount(() => {
 				</div>
 			{/if}
 
-			<!-- New Users Chart -->
-			{#if newUsersChartLoading}
-				<LoadingSkeleton type="chart" height={160} />
-			{:else if newUsers.length > 0}
-				<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-2.5">
-					<h3 class="mb-1.5 text-xs font-semibold text-slate-400">New Users (30d)<InfoTooltip text="First-time pubkeys seen publishing any event. A pubkey is counted as 'new' on the day of their first indexed event." /></h3>
-					<Chart labels={newUsersLabels} datasets={newUsersData} height={160} />
-				</div>
-			{/if}
+			<!-- New Users Charts (Daily/Weekly/Monthly) -->
+			<div class="grid gap-3 md:grid-cols-3">
+				{#if newUsersChartLoading}
+					<LoadingSkeleton type="chart" height={180} />
+					<LoadingSkeleton type="chart" height={180} />
+					<LoadingSkeleton type="chart" height={180} />
+				{:else}
+					{#if newUsers.length > 0}
+						<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+							<h3 class="mb-2 text-sm font-semibold text-slate-400">Daily New Users (30d)<InfoTooltip text="First-time pubkeys seen publishing any event each day. A pubkey is counted as 'new' on the day of their first indexed event." /></h3>
+							<Chart labels={newUsersLabels} datasets={newUsersData} height={180} />
+						</div>
+					{/if}
+					{#if newUsersWeekly.length > 0}
+						<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+							<h3 class="mb-2 text-sm font-semibold text-slate-400">Weekly New Users (24w)<InfoTooltip text="First-time pubkeys seen publishing any event each week. A pubkey is counted as 'new' in the week of their first indexed event." /></h3>
+							<Chart labels={newUsersWeeklyLabels} datasets={newUsersWeeklyData} height={180} />
+						</div>
+					{/if}
+					{#if newUsersMonthly.length > 0}
+						<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+							<h3 class="mb-2 text-sm font-semibold text-slate-400">Monthly New Users (24m)<InfoTooltip text="First-time pubkeys seen publishing any event each month. A pubkey is counted as 'new' in the month of their first indexed event." /></h3>
+							<Chart labels={newUsersMonthlyLabels} datasets={newUsersMonthlyData} height={180} />
+						</div>
+					{/if}
+				{/if}
+			</div>
+		</section>
 
-			<!-- User Retention Cohort Table -->
-			{#if retentionLoading}
-				<div class="mt-2">
-					<LoadingSkeleton type="table" rows={8} />
-				</div>
-			{:else if retention.length > 0}
-				<div class="mt-2 rounded-lg border border-slate-700/50 bg-slate-900/50 p-2.5">
-					<h3 class="mb-1.5 text-xs font-semibold text-slate-400">Weekly Retention (Cohort Analysis)<InfoTooltip text="Cohort retention analysis. Each row represents users who first appeared in that week. Columns show what percentage of those users returned in subsequent weeks." /></h3>
-					<div class="overflow-x-auto -mx-2.5 px-2.5">
-						<table class="w-full text-[10px] sm:text-xs min-w-[400px]">
-							<thead>
-								<tr class="border-b border-slate-700/50 text-left text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-500">
-									<th class="py-1.5 pr-2 sm:pr-3 whitespace-nowrap">Cohort</th>
-									<th class="py-1.5 px-1 sm:px-2 text-right whitespace-nowrap">Size</th>
-									{#each Array(Math.min(8, Math.max(...retention.map(r => r.retention_pct.length)))) as _, i}
-										<th class="py-1.5 px-1 sm:px-2 text-right">W{i}</th>
-									{/each}
-								</tr>
-							</thead>
-							<tbody>
-								{#each retention.slice(0, 12) as cohort}
-									<tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
-										<td class="py-1 pr-2 sm:pr-3 font-mono text-slate-300 whitespace-nowrap">
-											{new Date(cohort.cohort).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-										</td>
-										<td class="py-1 px-1 sm:px-2 text-right font-mono text-slate-400">{formatNumber(cohort.cohort_size)}</td>
-										{#each cohort.retention_pct.slice(0, 8) as pct, i}
-											{@const colors = getHeatmapColor(pct)}
-											<td
-												class="py-1 px-1 sm:px-2 text-right font-mono font-medium"
-												style="background-color: {colors.bg}; color: {colors.text}"
-											>
-												{pct.toFixed(0)}%
-											</td>
-										{/each}
-										{#each Array(Math.max(0, 8 - cohort.retention_pct.length)) as _}
-											<td class="py-1 px-1 sm:px-2 text-right text-slate-600">-</td>
+		<!-- User Retention Section -->
+		<section class="mb-12">
+			<h2 class="mb-4">
+				<div class="text-2xl sm:text-3xl font-bold tracking-tight text-orange-400">User Retention</div>
+				<div class="mt-1 text-xs font-normal text-slate-500">Cohort analysis of returning users</div>
+			</h2>
+
+			<!-- Tab Switcher -->
+			<div class="mb-4 flex gap-1 rounded-lg bg-slate-800/50 p-1 w-fit">
+				<button
+					onclick={() => retentionTab = 'weekly'}
+					class="px-4 py-1.5 text-sm font-medium rounded-md transition-colors {retentionTab === 'weekly' ? 'bg-orange-500/20 text-orange-400' : 'text-slate-400 hover:text-slate-300'}"
+				>
+					Weekly
+				</button>
+				<button
+					onclick={() => retentionTab = 'monthly'}
+					class="px-4 py-1.5 text-sm font-medium rounded-md transition-colors {retentionTab === 'monthly' ? 'bg-orange-500/20 text-orange-400' : 'text-slate-400 hover:text-slate-300'}"
+				>
+					Monthly
+				</button>
+			</div>
+
+			<!-- Weekly Retention -->
+			{#if retentionTab === 'weekly'}
+				{#if retentionLoading}
+					<div class="mb-3">
+						<LoadingSkeleton type="table" rows={8} />
+					</div>
+				{:else if retention.length > 0}
+					<!-- Weekly Retention Chart -->
+					<div class="mb-3 rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+						<h3 class="mb-2 text-sm font-semibold text-slate-400">Retention by Cohort<InfoTooltip text="Line chart showing retention rates for each weekly cohort. Each line represents users who joined in that week, showing what percentage returned in subsequent weeks." /></h3>
+						<Chart labels={weeklyRetentionLabels()} datasets={weeklyRetentionChartData()} height={220} isPercent={true} />
+					</div>
+
+					<!-- Weekly Retention Table -->
+					<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+						<h3 class="mb-2 text-sm font-semibold text-slate-400">Retention Table<InfoTooltip text="Cohort retention analysis. Each row represents users who first appeared in that week. Columns show what percentage of those users returned in subsequent weeks." /></h3>
+						<div class="overflow-x-auto -mx-3 px-3">
+							<table class="w-full text-xs sm:text-sm min-w-[400px]">
+								<thead>
+									<tr class="border-b border-slate-700/50 text-left text-[10px] sm:text-xs uppercase tracking-wider text-slate-500">
+										<th class="py-2 pr-3 whitespace-nowrap">Cohort</th>
+										<th class="py-2 px-2 text-right whitespace-nowrap">Size</th>
+										{#each Array(Math.min(8, Math.max(...retention.map(r => r.retention_pct.length)))) as _, i}
+											<th class="py-2 px-2 text-right">W{i}</th>
 										{/each}
 									</tr>
-								{/each}
-							</tbody>
-						</table>
+								</thead>
+								<tbody>
+									{#each retention.slice(0, 12) as cohort}
+										<tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
+											<td class="py-1.5 pr-3 font-mono text-slate-300 whitespace-nowrap">
+												{new Date(cohort.cohort).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+											</td>
+											<td class="py-1.5 px-2 text-right font-mono text-slate-400">{formatNumber(cohort.cohort_size)}</td>
+											{#each cohort.retention_pct.slice(0, 8) as pct, i}
+												{@const colors = getHeatmapColor(pct)}
+												<td
+													class="py-1.5 px-2 text-right font-mono font-medium"
+													style="background-color: {colors.bg}; color: {colors.text}"
+												>
+													{pct.toFixed(0)}%
+												</td>
+											{/each}
+											{#each Array(Math.max(0, 8 - cohort.retention_pct.length)) as _}
+												<td class="py-1.5 px-2 text-right text-slate-600">-</td>
+											{/each}
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+						<div class="mt-2 text-xs text-slate-500">
+							W0 = first week (always 100%), W1+ = subsequent weeks. Blue to Yellow/Orange = higher retention.
+						</div>
 					</div>
-					<div class="mt-2 text-[9px] sm:text-[10px] text-slate-500">
-						W0 = first week (always 100%), W1+ = subsequent weeks. Blue → Yellow/Orange = higher retention.
+				{/if}
+			{/if}
+
+			<!-- Monthly Retention -->
+			{#if retentionTab === 'monthly'}
+				{#if monthlyRetentionLoading}
+					<div class="mb-3">
+						<LoadingSkeleton type="table" rows={8} />
 					</div>
-				</div>
+				{:else if monthlyRetention.length > 0}
+					<!-- Monthly Retention Chart -->
+					<div class="mb-3 rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+						<h3 class="mb-2 text-sm font-semibold text-slate-400">Retention by Cohort<InfoTooltip text="Line chart showing retention rates for each monthly cohort. Each line represents users who joined in that month, showing what percentage returned in subsequent months." /></h3>
+						<Chart labels={monthlyRetentionLabels()} datasets={monthlyRetentionChartData()} height={220} isPercent={true} />
+					</div>
+
+					<!-- Monthly Retention Table -->
+					<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+						<h3 class="mb-2 text-sm font-semibold text-slate-400">Retention Table<InfoTooltip text="Cohort retention analysis. Each row represents users who first appeared in that month. Columns show what percentage of those users returned in subsequent months." /></h3>
+						<div class="overflow-x-auto -mx-3 px-3">
+							<table class="w-full text-xs sm:text-sm min-w-[400px]">
+								<thead>
+									<tr class="border-b border-slate-700/50 text-left text-[10px] sm:text-xs uppercase tracking-wider text-slate-500">
+										<th class="py-2 pr-3 whitespace-nowrap">Cohort</th>
+										<th class="py-2 px-2 text-right whitespace-nowrap">Size</th>
+										{#each Array(Math.min(8, Math.max(...monthlyRetention.map(r => r.retention_pct.length)))) as _, i}
+											<th class="py-2 px-2 text-right">M{i}</th>
+										{/each}
+									</tr>
+								</thead>
+								<tbody>
+									{#each monthlyRetention.slice(0, 12) as cohort}
+										<tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
+											<td class="py-1.5 pr-3 font-mono text-slate-300 whitespace-nowrap">
+												{new Date(cohort.cohort).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
+											</td>
+											<td class="py-1.5 px-2 text-right font-mono text-slate-400">{formatNumber(cohort.cohort_size)}</td>
+											{#each cohort.retention_pct.slice(0, 8) as pct, i}
+												{@const colors = getHeatmapColor(pct)}
+												<td
+													class="py-1.5 px-2 text-right font-mono font-medium"
+													style="background-color: {colors.bg}; color: {colors.text}"
+												>
+													{pct.toFixed(0)}%
+												</td>
+											{/each}
+											{#each Array(Math.max(0, 8 - cohort.retention_pct.length)) as _}
+												<td class="py-1.5 px-2 text-right text-slate-600">-</td>
+											{/each}
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+						<div class="mt-2 text-xs text-slate-500">
+							M0 = first month (always 100%), M1+ = subsequent months. Blue to Yellow/Orange = higher retention.
+						</div>
+					</div>
+				{/if}
 			{/if}
 		</section>
 
 
 		<!-- Zaps Section -->
-		<section class="mb-6">
-			<h2 class="mb-3 flex items-center gap-2 border-b border-amber-500/30 pb-2 text-sm sm:text-base font-bold uppercase tracking-wider text-amber-400">
-				<span>⚡</span> Zaps
+		<section class="mb-12">
+			<h2 class="mb-4">
+				<div class="text-2xl sm:text-3xl font-bold tracking-tight text-amber-400">Zaps</div>
+				<div class="mt-1 text-xs font-normal text-slate-500">Lightning payments on Nostr</div>
 			</h2>
 
 			<!-- Zap Summary Tiles -->
 			{#if zapsSummaryLoading}
-				<div class="mb-2">
+				<div class="mb-3">
 					<LoadingSkeleton type="stat-row" />
 				</div>
 			{:else if zapStats30d || zapStats90d || zapStatsAllTime}
-				<div class="mb-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+				<div class="mb-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
 					{#if zapStats30d}
-						<div class="rounded-lg border border-amber-500/20 bg-slate-900/50 p-2.5">
-							<div class="flex items-center justify-between text-xs text-slate-400">
+						<div class="rounded-lg border border-amber-500/20 bg-slate-900/50 p-3">
+							<div class="flex items-center justify-between text-sm text-slate-400">
 								<span>30 Days<InfoTooltip text="Zap statistics for the last 30 days. Based on kind 9735 zap receipt events. Shows total sats, zap count, average zap size, and unique senders." /></span>
 							</div>
-							<div class="mt-1 font-mono text-xl font-bold text-amber-400">{formatSats(zapStats30d.total_sats)}</div>
-							<div class="mt-1 text-xs text-slate-500 space-y-0.5">
+							<div class="mt-1.5 font-mono text-2xl font-bold text-amber-400">{formatSats(zapStats30d.total_sats)}</div>
+							<div class="mt-2 text-sm text-slate-500 space-y-1">
 								<div class="flex justify-between"><span>zap count</span><span class="font-mono text-slate-400">{formatNumber(zapStats30d.total_zaps)}</span></div>
 								<div class="flex justify-between"><span>avg zap</span><span class="font-mono text-slate-400">{formatSats(Math.round(zapStats30d.avg_zap_sats))}</span></div>
 								<div class="flex justify-between"><span>senders</span><span class="font-mono text-slate-400">{formatNumber(zapStats30d.unique_senders)}</span></div>
@@ -908,12 +1210,12 @@ onMount(() => {
 						</div>
 					{/if}
 					{#if zapStats90d}
-						<div class="rounded-lg border border-orange-500/20 bg-slate-900/50 p-2.5">
-							<div class="flex items-center justify-between text-xs text-slate-400">
+						<div class="rounded-lg border border-orange-500/20 bg-slate-900/50 p-3">
+							<div class="flex items-center justify-between text-sm text-slate-400">
 								<span>90 Days<InfoTooltip text="Zap statistics for the last 90 days. Based on kind 9735 zap receipt events. Shows total sats, zap count, average zap size, and unique senders." /></span>
 							</div>
-							<div class="mt-1 font-mono text-xl font-bold text-orange-400">{formatSats(zapStats90d.total_sats)}</div>
-							<div class="mt-1 text-xs text-slate-500 space-y-0.5">
+							<div class="mt-1.5 font-mono text-2xl font-bold text-orange-400">{formatSats(zapStats90d.total_sats)}</div>
+							<div class="mt-2 text-sm text-slate-500 space-y-1">
 								<div class="flex justify-between"><span>zap count</span><span class="font-mono text-slate-400">{formatNumber(zapStats90d.total_zaps)}</span></div>
 								<div class="flex justify-between"><span>avg zap</span><span class="font-mono text-slate-400">{formatSats(Math.round(zapStats90d.avg_zap_sats))}</span></div>
 								<div class="flex justify-between"><span>senders</span><span class="font-mono text-slate-400">{formatNumber(zapStats90d.unique_senders)}</span></div>
@@ -921,12 +1223,12 @@ onMount(() => {
 						</div>
 					{/if}
 					{#if zapStatsAllTime}
-						<div class="rounded-lg border border-yellow-500/20 bg-slate-900/50 p-2.5">
-							<div class="flex items-center justify-between text-xs text-slate-400">
+						<div class="rounded-lg border border-yellow-500/20 bg-slate-900/50 p-3">
+							<div class="flex items-center justify-between text-sm text-slate-400">
 								<span>All Time<InfoTooltip text="Cumulative zap statistics for all indexed zap receipt events. Shows total sats, zap count, average zap size, and unique senders." /></span>
 							</div>
-							<div class="mt-1 font-mono text-xl font-bold text-yellow-400">{formatSats(zapStatsAllTime.total_sats)}</div>
-							<div class="mt-1 text-xs text-slate-500 space-y-0.5">
+							<div class="mt-1.5 font-mono text-2xl font-bold text-yellow-400">{formatSats(zapStatsAllTime.total_sats)}</div>
+							<div class="mt-2 text-sm text-slate-500 space-y-1">
 								<div class="flex justify-between"><span>zap count</span><span class="font-mono text-slate-400">{formatNumber(zapStatsAllTime.total_zaps)}</span></div>
 								<div class="flex justify-between"><span>avg zap</span><span class="font-mono text-slate-400">{formatSats(Math.round(zapStatsAllTime.avg_zap_sats))}</span></div>
 								<div class="flex justify-between"><span>senders</span><span class="font-mono text-slate-400">{formatNumber(zapStatsAllTime.unique_senders)}</span></div>
@@ -937,12 +1239,12 @@ onMount(() => {
 			{/if}
 
 			{#if zapsChartLoading}
-				<div class="mb-2">
+				<div class="mb-3">
 					<LoadingSkeleton type="chart" height={180} />
 				</div>
 			{:else if zapsByDay.length > 0}
-				<div class="mb-2 rounded-lg border border-slate-700/50 bg-slate-900/50 p-2.5">
-					<h3 class="mb-1.5 text-xs font-semibold text-slate-400">Zaps Over Time (30d)<InfoTooltip text="Total sats zapped (left axis, area) and number of zap events (right axis, line) per day. Based on kind 9735 zap receipt events." /></h3>
+				<div class="mb-3 rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+					<h3 class="mb-2 text-sm font-semibold text-slate-400">Zaps Over Time (30d)<InfoTooltip text="Total sats zapped (left axis, area) and number of zap events (right axis, line) per day. Based on kind 9735 zap receipt events." /></h3>
 					<Chart labels={zapsLabels} datasets={zapsCombinedData} dualAxis={true} height={180} />
 				</div>
 			{/if}
@@ -950,62 +1252,63 @@ onMount(() => {
 			{#if zapsHistogramLoading}
 				<LoadingSkeleton type="chart" height={180} />
 			{:else if zapHistogram.length > 0}
-				<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-2.5">
-					<h3 class="mb-1.5 text-xs font-semibold text-slate-400">Zap Amount Distribution (30d)<InfoTooltip text="Distribution of zap amounts by bucket. Shows how many zaps fall into each sats range (e.g., 1–10 sats, 11–100 sats, etc.)." /></h3>
+				<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+					<h3 class="mb-2 text-sm font-semibold text-slate-400">Zap Amount Distribution (30d)<InfoTooltip text="Distribution of zap amounts by bucket. Shows how many zaps fall into each sats range (e.g., 1–10 sats, 11–100 sats, etc.)." /></h3>
 					<Chart labels={histogramLabels} datasets={histogramData} type="bar" height={180} />
 				</div>
 			{/if}
 		</section>
 
 		<!-- Relay Distribution Section -->
-		<section class="mb-6">
-			<h2 class="mb-3 flex items-center gap-2 border-b border-sky-500/30 pb-2 text-sm sm:text-base font-bold uppercase tracking-wider text-sky-400">
-				<span>📡</span> Relay Distribution
+		<section class="mb-12">
+			<h2 class="mb-4">
+				<div class="text-2xl sm:text-3xl font-bold tracking-tight text-sky-400">Relay Distribution</div>
+				<div class="mt-1 text-xs font-normal text-slate-500">User relay preferences from NIP-65</div>
 			</h2>
 
 			{#if relayDistributionLoading}
 				<LoadingSkeleton type="table" rows={10} />
 			{:else if relayDistribution.length > 0}
-				<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-2.5">
-					<h3 class="mb-1.5 text-xs font-semibold text-slate-400">Top Relays by User Count<InfoTooltip text="Relay popularity based on NIP-65 relay lists (kind 10002). Shows how many users have each relay in their outbox model configuration. Read = users who read from this relay, Write = users who write to this relay." /></h3>
-					<div class="overflow-x-auto -mx-2.5 px-2.5">
-						<table class="w-full text-xs">
+				<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+					<h3 class="mb-2 text-sm font-semibold text-slate-400">Top Relays by User Count<InfoTooltip text="Relay popularity based on NIP-65 relay lists (kind 10002). Shows how many users have each relay in their outbox model configuration. Read = users who read from this relay, Write = users who write to this relay." /></h3>
+					<div class="overflow-x-auto -mx-3 px-3">
+						<table class="w-full text-sm">
 							<thead>
-								<tr class="border-b border-slate-700/50 text-left text-[10px] uppercase tracking-wider text-slate-500">
-									<th class="py-1.5 pr-3">#</th>
-									<th class="py-1.5 pr-1 text-center">Status</th>
-									<th class="py-1.5 pr-3">Relay</th>
-									<th class="py-1.5 px-2 text-right">Users</th>
-									<th class="py-1.5 px-2 text-right">Read</th>
-									<th class="py-1.5 px-2 text-right">Write</th>
+								<tr class="border-b border-slate-700/50 text-left text-xs uppercase tracking-wider text-slate-500">
+									<th class="py-2 pr-3">#</th>
+									<th class="py-2 pr-2 text-center">Status</th>
+									<th class="py-2 pr-3">Relay</th>
+									<th class="py-2 px-2 text-right">Users</th>
+									<th class="py-2 px-2 text-right">Read</th>
+									<th class="py-2 px-2 text-right">Write</th>
 								</tr>
 							</thead>
 							<tbody>
 								{#each relayDistribution as relay, i}
 									{@const status = relayStatus.get(relay.relay_url) ?? 'checking'}
 									<tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
-										<td class="py-1.5 pr-3 text-slate-500 font-mono">{i + 1}</td>
-										<td class="py-1.5 pr-1 text-center">
+										<td class="py-2 pr-3 text-slate-500 font-mono">{i + 1}</td>
+										<td class="py-2 pr-2 text-center">
 											{#if status === 'checking'}
-												<span class="inline-block w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Checking..."></span>
+												<span class="inline-block w-2.5 h-2.5 rounded-full bg-yellow-400 animate-pulse" title="Checking..."></span>
 											{:else if status === 'reachable'}
-												<span class="inline-block w-2 h-2 rounded-full bg-green-400" title="Reachable"></span>
+												<span class="inline-block w-2.5 h-2.5 rounded-full bg-green-400" title="Reachable"></span>
 											{:else}
-												<span class="inline-block w-2 h-2 rounded-full bg-red-400" title="Unreachable"></span>
+												<span class="inline-block w-2.5 h-2.5 rounded-full bg-red-400" title="Unreachable"></span>
 											{/if}
 										</td>
-										<td class="py-1.5 pr-3 font-mono text-sky-400 text-[11px] truncate max-w-[200px] sm:max-w-[300px]" title={relay.relay_url}>
+										<td class="py-2 pr-3 font-mono text-sky-400 text-sm truncate max-w-[200px] sm:max-w-[300px]" title={relay.relay_url}>
 											{relay.relay_url.replace('wss://', '')}
 										</td>
-										<td class="py-1.5 px-2 text-right font-mono text-slate-300">{formatNumber(relay.user_count)}</td>
-										<td class="py-1.5 px-2 text-right font-mono text-slate-400">{formatNumber(relay.read_count)}</td>
-										<td class="py-1.5 px-2 text-right font-mono text-slate-400">{formatNumber(relay.write_count)}</td>
+										<td class="py-2 px-2 text-right font-mono text-slate-300">{formatNumber(relay.user_count)}</td>
+										<td class="py-2 px-2 text-right font-mono text-slate-400">{formatNumber(relay.read_count)}</td>
+										<td class="py-2 px-2 text-right font-mono text-slate-400">{formatNumber(relay.write_count)}</td>
 									</tr>
 								{/each}
 							</tbody>
 						</table>
 					</div>
-					<div class="mt-2 text-[10px] text-slate-500">
+					<div class="mt-2 text-xs text-slate-500">
 						Based on latest NIP-65 relay list (kind 10002) per user. Data refreshed every 6 hours.
 					</div>
 				</div>
@@ -1013,35 +1316,36 @@ onMount(() => {
 		</section>
 
 		<!-- Events Section -->
-		<section class="mb-6">
-			<h2 class="mb-3 flex items-center gap-2 border-b border-emerald-500/30 pb-2 text-sm sm:text-base font-bold uppercase tracking-wider text-emerald-400">
-				<span>📊</span> Events
+		<section class="mb-12">
+			<h2 class="mb-4">
+				<div class="text-2xl sm:text-3xl font-bold tracking-tight text-emerald-400">Events</div>
+				<div class="mt-1 text-xs font-normal text-slate-500">Event publishing activity and types</div>
 			</h2>
 
 			<!-- Engagement & Throughput Summary -->
-			<div class="mb-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+			<div class="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
 				{#if engagementLoading}
-					<div class="rounded-lg border border-slate-700/30 bg-slate-900/50 p-2.5 animate-pulse">
-						<div class="h-2.5 w-24 rounded bg-slate-700/50 mb-2"></div>
-						<div class="h-6 w-16 rounded bg-slate-700/40 mb-2"></div>
-						<div class="space-y-1">
+					<div class="rounded-lg border border-slate-700/30 bg-slate-900/50 p-3 animate-pulse">
+						<div class="h-3 w-24 rounded bg-slate-700/50 mb-2"></div>
+						<div class="h-7 w-16 rounded bg-slate-700/40 mb-2"></div>
+						<div class="space-y-1.5">
 							<div class="flex justify-between">
-								<div class="h-2 w-16 rounded bg-slate-800/50"></div>
-								<div class="h-2 w-8 rounded bg-slate-800/50"></div>
+								<div class="h-2.5 w-16 rounded bg-slate-800/50"></div>
+								<div class="h-2.5 w-8 rounded bg-slate-800/50"></div>
 							</div>
 							<div class="flex justify-between">
-								<div class="h-2 w-20 rounded bg-slate-800/50"></div>
-								<div class="h-2 w-8 rounded bg-slate-800/50"></div>
+								<div class="h-2.5 w-20 rounded bg-slate-800/50"></div>
+								<div class="h-2.5 w-8 rounded bg-slate-800/50"></div>
 							</div>
 						</div>
 					</div>
 				{:else if engagement}
-					<div class="rounded-lg border border-emerald-500/20 bg-slate-900/50 p-2.5">
-						<div class="flex items-center justify-between text-xs text-slate-400">
+					<div class="rounded-lg border border-emerald-500/20 bg-slate-900/50 p-3">
+						<div class="flex items-center justify-between text-sm text-slate-400">
 							<span>Engagement ({engagement.period_days}d)<InfoTooltip text="Average replies and reactions per original note (kind 1 without reply tags). Measures how much interaction notes receive on average." /></span>
 						</div>
-						<div class="mt-1 font-mono text-xl font-bold text-emerald-400">{(engagement.replies_per_note + engagement.reactions_per_note).toFixed(2)}<span class="text-sm text-slate-500">/note</span></div>
-						<div class="mt-1 text-xs text-slate-500 space-y-0.5">
+						<div class="mt-1.5 font-mono text-2xl font-bold text-emerald-400">{(engagement.replies_per_note + engagement.reactions_per_note).toFixed(2)}<span class="text-base text-slate-500">/note</span></div>
+						<div class="mt-2 text-sm text-slate-500 space-y-1">
 							<div class="flex justify-between"><span>replies/note</span><span class="font-mono text-slate-400">{engagement.replies_per_note.toFixed(2)}</span></div>
 							<div class="flex justify-between"><span>reactions/note</span><span class="font-mono text-slate-400">{engagement.reactions_per_note.toFixed(2)}</span></div>
 							<div class="flex justify-between"><span>original notes</span><span class="font-mono text-slate-400">{formatNumber(engagement.original_notes)}</span></div>
@@ -1049,27 +1353,27 @@ onMount(() => {
 					</div>
 				{/if}
 				{#if throughputLoading}
-					<div class="rounded-lg border border-slate-700/30 bg-slate-900/50 p-2.5 animate-pulse">
-						<div class="h-2.5 w-28 rounded bg-slate-700/50 mb-2"></div>
-						<div class="h-6 w-20 rounded bg-slate-700/40 mb-2"></div>
-						<div class="space-y-1">
+					<div class="rounded-lg border border-slate-700/30 bg-slate-900/50 p-3 animate-pulse">
+						<div class="h-3 w-28 rounded bg-slate-700/50 mb-2"></div>
+						<div class="h-7 w-20 rounded bg-slate-700/40 mb-2"></div>
+						<div class="space-y-1.5">
 							<div class="flex justify-between">
-								<div class="h-2 w-12 rounded bg-slate-800/50"></div>
-								<div class="h-2 w-16 rounded bg-slate-800/50"></div>
+								<div class="h-2.5 w-12 rounded bg-slate-800/50"></div>
+								<div class="h-2.5 w-16 rounded bg-slate-800/50"></div>
 							</div>
 							<div class="flex justify-between">
-								<div class="h-2 w-14 rounded bg-slate-800/50"></div>
-								<div class="h-2 w-14 rounded bg-slate-800/50"></div>
+								<div class="h-2.5 w-14 rounded bg-slate-800/50"></div>
+								<div class="h-2.5 w-14 rounded bg-slate-800/50"></div>
 							</div>
 						</div>
 					</div>
 				{:else if throughput}
-					<div class="rounded-lg border border-indigo-500/20 bg-slate-900/50 p-2.5">
-						<div class="flex items-center justify-between text-xs text-slate-400">
+					<div class="rounded-lg border border-indigo-500/20 bg-slate-900/50 p-3">
+						<div class="flex items-center justify-between text-sm text-slate-400">
 							<span>Throughput (7d avg)<InfoTooltip text="Average events indexed per hour over the last 7 days. Shows total event volume and daily average." /></span>
 						</div>
-						<div class="mt-1 font-mono text-xl font-bold text-indigo-400">{formatNumber(Math.round(throughput.events_per_hour))}<span class="text-sm text-slate-500">/hr</span></div>
-						<div class="mt-1 text-xs text-slate-500 space-y-0.5">
+						<div class="mt-1.5 font-mono text-2xl font-bold text-indigo-400">{formatNumber(Math.round(throughput.events_per_hour))}<span class="text-base text-slate-500">/hr</span></div>
+						<div class="mt-2 text-sm text-slate-500 space-y-1">
 							<div class="flex justify-between"><span>7d total</span><span class="font-mono text-slate-400">{formatNumber(throughput.total_events_7d)}</span></div>
 							<div class="flex justify-between"><span>per day</span><span class="font-mono text-slate-400">{formatNumber(Math.round(throughput.total_events_7d / 7))}</span></div>
 						</div>
@@ -1079,24 +1383,36 @@ onMount(() => {
 
 			<!-- Hourly Activity -->
 			{#if hourlyActivityLoading}
-				<div class="mb-2">
+				<div class="mb-3">
 					<LoadingSkeleton type="chart" height={160} />
 				</div>
 			{:else if hourlyActivity.length > 0}
-				<div class="mb-2 rounded-lg border border-slate-700/50 bg-slate-900/50 p-2.5">
-					<h3 class="mb-1.5 text-xs font-semibold text-slate-400">Event publishing by hour, UTC (7d avg)<InfoTooltip text="Average number of events published per hour of the day (UTC), averaged over the last 7 days. Shows when users are most active." /></h3>
-					<Chart labels={hourlyLabels} datasets={hourlyData} type="bar" height={160} />
+				<div class="mb-3 rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+					<div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+						<h3 class="text-sm font-semibold text-slate-400">Event publishing by hour, UTC (7d avg)<InfoTooltip text="Average number of events published per hour of the day (UTC), averaged over the last 7 days. Shows when users are most active." /></h3>
+						<div class="flex gap-1 rounded-lg bg-slate-800/50 p-1">
+							{#each ['all', 1, 0, 3, 6, 7, 9735] as tab}
+								<button
+									onclick={() => hourlyActivityTab = tab as typeof hourlyActivityTab}
+									class="px-2 py-1 text-xs font-medium rounded transition-colors {hourlyActivityTab === tab ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-400 hover:text-slate-300'}"
+								>
+									{HOURLY_TAB_LABELS[tab as keyof typeof HOURLY_TAB_LABELS]}
+								</button>
+							{/each}
+						</div>
+					</div>
+					<Chart labels={selectedHourlyLabels()} datasets={selectedHourlyData()} type="bar" height={160} />
 				</div>
 			{/if}
 
 			<!-- Daily Events Stacked Bar Chart -->
 			{#if dailyEventsLoading || topKindsLoading}
-				<div class="mb-2">
+				<div class="mb-3">
 					<LoadingSkeleton type="chart" height={260} />
 				</div>
 			{:else if dailyEvents.length > 0 && kindActivityData.size > 0}
-				<div class="mb-2 rounded-lg border border-slate-700/50 bg-slate-900/50 p-2.5">
-					<h3 class="mb-1.5 text-xs font-semibold text-slate-400">Daily Events by Kind (30d)<InfoTooltip text="Total events per day, broken down by event kind. Shows the top 10 event kinds by volume, with all others grouped as 'Other'." /></h3>
+				<div class="mb-3 rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+					<h3 class="mb-2 text-sm font-semibold text-slate-400">Daily Events by Kind (30d)<InfoTooltip text="Total events per day, broken down by event kind. Shows the top 10 event kinds by volume, with all others grouped as 'Other'." /></h3>
 					<Chart labels={eventsChartLabels} datasets={eventsStackedData()} type="bar" stacked={true} height={260} />
 				</div>
 			{/if}
@@ -1105,8 +1421,8 @@ onMount(() => {
 			{#if topKindsLoading}
 				<LoadingSkeleton type="table" rows={10} />
 			{:else if topKinds.length > 0}
-				<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-2.5">
-					<h3 class="mb-1.5 text-xs font-semibold text-slate-400">Event Types<InfoTooltip text="All indexed event types ranked by volume. Click column headers to sort. 'Users' shows unique pubkeys that have published this event type." /></h3>
+				<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
+					<h3 class="mb-2 text-sm font-semibold text-slate-400">Event Types<InfoTooltip text="All indexed event types ranked by volume. Click column headers to sort. 'Users' shows unique pubkeys that have published this event type." /></h3>
 					<SortableTable data={topKinds} />
 				</div>
 			{/if}

@@ -196,8 +196,10 @@ export interface HourlyActivityRow {
 	avg_per_day: number
 }
 
-export function getHourlyActivity(days = 7): Promise<HourlyActivityRow[]> {
-	return fetchApi(`/api/v1/stats/activity/hourly?days=${days}`)
+export function getHourlyActivity(days = 7, kind?: number): Promise<HourlyActivityRow[]> {
+	const params = new URLSearchParams({ days: days.toString() })
+	if (kind !== undefined) params.append('kind', kind.toString())
+	return fetchApi(`/api/v1/stats/activity/hourly?${params}`)
 }
 
 // Zap statistics

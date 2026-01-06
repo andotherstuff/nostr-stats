@@ -17,9 +17,10 @@ interface Props {
 	height?: number
 	stacked?: boolean
 	dualAxis?: boolean
+	isPercent?: boolean
 }
 
-const { labels, datasets, type = 'line', height = 200, stacked = false, dualAxis = false }: Props = $props()
+const { labels, datasets, type = 'line', height = 200, stacked = false, dualAxis = false, isPercent = false }: Props = $props()
 
 let canvas: HTMLCanvasElement
 let chart: Chart | null = null
@@ -133,7 +134,9 @@ function createChart() {
 						label: (context) => {
 							const value = context.parsed.y ?? 0
 							let formatted: string
-							if (value >= 1_000_000) {
+							if (isPercent) {
+								formatted = `${value.toFixed(2)}%`
+							} else if (value >= 1_000_000) {
 								formatted = `${(value / 1_000_000).toFixed(2)}M`
 							} else if (value >= 1_000) {
 								formatted = `${(value / 1_000).toFixed(1)}K`
