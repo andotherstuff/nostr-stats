@@ -2,6 +2,8 @@
 
 Instructions for AI agents working on this codebase.
 
+> **⚠️ IMPORTANT: After ANY code changes, you MUST run the validation commands in the "Required Checks" section below and ensure they all pass before considering your work complete.**
+
 ## Project Overview
 
 Nostr Stats is a SvelteKit dashboard that displays statistics from a Nostr relay/indexer backend. It's a static site deployed to GitHub Pages.
@@ -33,7 +35,14 @@ bun run preview
 
 ## Required Checks
 
-**Before considering any change complete, you MUST run all of these checks and ensure they pass:**
+**Before considering any change complete, you MUST run all of these checks and ensure they pass.** This is non-negotiable—never skip these steps:
+
+```bash
+# Run all checks in sequence (copy/paste this entire block)
+bun run check && bun run lint && bun run biome:check && bun run build
+```
+
+Or run them individually:
 
 ```bash
 # 1. Type checking and Svelte validation
@@ -49,7 +58,7 @@ bun run biome:check
 bun run build
 ```
 
-If any check fails, fix the issues before finishing. You can auto-fix many lint and format issues:
+**If any check fails, fix the issues before finishing.** You can auto-fix many lint and format issues:
 
 ```bash
 # Fix lint issues
@@ -61,6 +70,8 @@ bun run format
 # Fix both lint and format
 bun run biome:fix
 ```
+
+**Do not rely on exit codes alone**—read the output to ensure there are no errors or warnings.
 
 ## Project Structure
 

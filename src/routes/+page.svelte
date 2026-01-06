@@ -1,5 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte'
+import { base } from '$app/paths'
 import {
 	type ActiveUsersRow,
 	type EventCountByPeriod,
@@ -783,7 +784,7 @@ onMount(() => {
 	<meta property="og:title" content="Nostr Stats" />
 	<meta property="og:description" content="Real-time analytics for the Nostr network" />
 	<meta property="og:url" content="https://stats.andotherstuff.org" />
-	<meta property="og:image" content="https://stats.andotherstuff.org/og-image.png" />
+	<meta property="og:image" content="https://stats.andotherstuff.org/og-image.webp" />
 	<meta property="og:site_name" content="Nostr Stats" />
 
 	<!-- Twitter/X Card -->
@@ -791,7 +792,7 @@ onMount(() => {
 	<meta name="twitter:url" content="https://stats.andotherstuff.org" />
 	<meta name="twitter:title" content="Nostr Stats" />
 	<meta name="twitter:description" content="Real-time analytics for the Nostr network" />
-	<meta name="twitter:image" content="https://stats.andotherstuff.org/og-image.png" />
+	<meta name="twitter:image" content="https://stats.andotherstuff.org/og-image.webp" />
 
 	<!-- Fonts -->
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -808,10 +809,10 @@ onMount(() => {
 
 	<div class="mx-auto max-w-7xl px-3 py-3">
 		<!-- Header -->
-		<header class="mb-3">
+		<header class="mb-8">
 			<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
 				<h1 class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-200">
-					<img src="/logo/SVG/Mark Color on Dark.svg" alt="Nostr Stats" class="h-7 w-7" />
+					<img src="{base}/logo/SVG/Mark Color on Dark.svg" alt="Nostr Stats" class="h-7 w-7" />
 					<span>Nostr Stats</span>
 				</h1>
 				<div class="flex items-center gap-2 sm:gap-3 text-xs order-last sm:order-none w-full sm:w-auto">
