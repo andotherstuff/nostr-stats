@@ -43,8 +43,9 @@ import LoadingSkeleton from '$lib/components/LoadingSkeleton.svelte'
 import InfoTooltip from '$lib/components/InfoTooltip.svelte'
 import { formatDate, formatNumber, formatSats, percentChange, formatPercent } from '$lib/format'
 
-// Header stats - individual loading
-let headerLoading = $state(true)
+// Header stats - separate loading for counts vs date range
+let headerCountsLoading = $state(true)
+let headerDatesLoading = $state(true)
 let totalEvents = $state<number | null>(null)
 let totalPubkeys = $state<number | null>(null)
 let totalKinds = $state<number | null>(null)
@@ -512,26 +513,38 @@ async function safeFetch<T>(promise: Promise<T>, fallback: T): Promise<T> {
 }
 
 // Independent data loaders - each runs in parallel
-async function loadHeaderStats() {
-	headerLoading = true
+async function loadHeaderCounts() {
+	headerCountsLoading = true
 	try {
-		const [events, pubkeys, kinds, earliest, latest] = await Promise.all([
+		const [events, pubkeys, kinds] = await Promise.all([
 			getTotalEvents(),
 			getTotalPubkeys(),
 			getTotalKinds(),
-			getEarliestEvent(),
-			getLatestEvent(),
 		])
 		totalEvents = events.count
 		totalPubkeys = pubkeys.count
 		totalKinds = kinds.count
-		earliestEvent = earliest.timestamp
-		latestEvent = latest.timestamp
 		lastUpdated = new Date()
 	} catch (e) {
-		console.warn('Header stats failed:', e)
+		console.warn('Header counts failed:', e)
 	} finally {
-		headerLoading = false
+		headerCountsLoading = false
+	}
+}
+
+async function loadHeaderDates() {
+	headerDatesLoading = true
+	try {
+		const [earliest, latest] = await Promise.all([
+			getEarliestEvent(),
+			getLatestEvent(),
+		])
+		earliestEvent = earliest.timestamp
+		latestEvent = latest.timestamp
+	} catch (e) {
+		console.warn('Header dates failed:', e)
+	} finally {
+		headerDatesLoading = false
 	}
 }
 
@@ -742,7 +755,8 @@ async function loadAllData() {
 
 	// Fire off all loaders in parallel - they each manage their own loading state
 	await Promise.all([
-		loadHeaderStats(),
+		loadHeaderCounts(),
+		loadHeaderDates(),
 		loadDauChart(),
 		loadWauChart(),
 		loadMauChart(),
@@ -762,7 +776,7 @@ async function loadAllData() {
 
 // Check if any section is still loading
 const isAnyLoading = $derived(
-	headerLoading || dauChartLoading || wauChartLoading ||
+	headerCountsLoading || headerDatesLoading || dauChartLoading || wauChartLoading ||
 	mauChartLoading || newUsersLoading || retentionLoading || monthlyRetentionLoading || zapsSummaryLoading ||
 	zapsChartLoading || zapsHistogramLoading || engagementLoading || throughputLoading ||
 	hourlyActivityLoading || dailyEventsLoading || topKindsLoading || relayDistributionLoading
@@ -816,27 +830,31 @@ onMount(() => {
 					<span>Nostr Stats</span>
 				</h1>
 				<div class="flex items-center gap-2 sm:gap-3 text-xs order-last sm:order-none w-full sm:w-auto">
-					{#if headerLoading}
+					{#if headerCountsLoading}
 						<LoadingSkeleton type="header-stat" />
 					{:else if totalEvents !== null}
 						<span class="text-slate-500">
 							<span class="text-slate-400">Indexed:</span>
 							<span class="font-mono text-slate-300">{formatNumber(totalEvents)}</span> events
-							{#if earliestEvent !== null && latestEvent !== null}
+							{#if headerDatesLoading}
+								<span class="text-slate-600 mx-1">·</span>
+								<span class="text-slate-600 animate-pulse">loading dates...</span>
+							{:else if earliestEvent !== null && latestEvent !== null}
 								<span class="text-slate-600 mx-1">·</span>
 								<span>{formatDate(earliestEvent)} – {formatDate(latestEvent)}</span>
 							{/if}
 						</span>
 					{/if}
 				</div>
-				<div class="flex items-center gap-2 text-xs">
-					{#if lastUpdated}
-						<span class="text-slate-500 hidden sm:inline">{lastUpdated.toLocaleTimeString()}</span>
-					{/if}
-					<button onclick={loadAllData} disabled={isAnyLoading} class="rounded border border-slate-700 bg-slate-800/50 px-2 py-0.5 text-slate-300 hover:border-violet-500/50 disabled:opacity-50">
-						{isAnyLoading ? '...' : '↻'}
-					</button>
-				</div>
+			<div class="flex items-center gap-2 text-xs">
+				<a href="{base}/about" class="font-semibold text-slate-400 underline decoration-slate-600 hover:text-violet-400 hover:decoration-violet-400 transition-colors">About</a>
+				{#if lastUpdated}
+					<span class="text-slate-500 hidden sm:inline">{lastUpdated.toLocaleTimeString()}</span>
+				{/if}
+				<button onclick={loadAllData} disabled={isAnyLoading} class="rounded border border-slate-700 bg-slate-800/50 px-2 py-0.5 text-slate-300 hover:border-violet-500/50 disabled:opacity-50">
+					{isAnyLoading ? '...' : '↻'}
+				</button>
+			</div>
 			</div>
 		</header>
 
