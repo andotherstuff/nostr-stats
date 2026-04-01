@@ -6,7 +6,7 @@ Instructions for AI agents working on this codebase.
 
 ## Project Overview
 
-Nostr Stats is a SvelteKit dashboard that displays statistics from a Nostr relay/indexer backend. It's a static site deployed to GitHub Pages.
+Nostr Stats is a SvelteKit dashboard that displays statistics from a Nostr relay/indexer backend. It now relies on server-side routes so secrets stay on the server.
 
 ## Tech Stack
 
@@ -15,7 +15,7 @@ Nostr Stats is a SvelteKit dashboard that displays statistics from a Nostr relay
 - **Charts**: Chart.js
 - **Linting/Formatting**: Biome
 - **Package Manager**: Bun
-- **Deployment**: GitHub Pages (static adapter)
+- **Deployment**: Vercel (adapter-vercel)
 
 ## Development Commands
 
@@ -107,7 +107,7 @@ Always reference this documentation when working with backend endpoints. It cont
 
 The app uses these environment variables (set via `.env` or build args):
 
-- `VITE_API_URL` - Backend API URL (defaults to `http://localhost:8080`)
-- `VITE_API_TOKEN` - Optional API authentication token
-- `BASE_PATH` - Set during GitHub Pages build for correct asset paths
+- `PUBLIC_API_URL` - Backend API URL (defaults to `http://localhost:8080`)
+- `API_TOKEN` - Server-only API authentication token
+- `BASE_PATH` - Optional subpath base if needed
 

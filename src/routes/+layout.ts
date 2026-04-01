@@ -1,2 +1,2 @@
-// This enables prerendering for all pages (required for static adapter)
-export const prerender = true
+// Server-side rendering is required so API_TOKEN stays on the server.
+export const prerender = false

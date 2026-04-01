@@ -1,12 +1,9 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
-const API_TOKEN = import.meta.env.VITE_API_TOKEN || ''
+import { env } from '$env/dynamic/public'
+
+const API_URL = env.PUBLIC_API_URL || 'http://localhost:8080'
 
 async function fetchApi<T>(endpoint: string): Promise<T> {
-	const res = await fetch(`${API_URL}${endpoint}`, {
-		headers: {
-			Authorization: `Bearer ${API_TOKEN}`,
-		},
-	})
+	const res = await fetch(`${API_URL}${endpoint}`)
 
 	if (!res.ok) {
 		throw new Error(`API error: ${res.status} ${res.statusText}`)
@@ -281,6 +278,36 @@ export interface RelayDistributionRow {
 
 export function getRelayDistribution(limit = 100): Promise<RelayDistributionRow[]> {
 	return fetchApi(`/api/v1/stats/relays/distribution?limit=${limit}`)
+}
+
+export interface DashboardData {
+	generatedAt: string
+	totalEvents: number | null
+	totalPubkeys: number | null
+	totalKinds: number | null
+	earliestEvent: number | null
+	latestEvent: number | null
+	dailyActiveUsers: ActiveUsersRow[]
+	weeklyActiveUsers: ActiveUsersRow[]
+	monthlyActiveUsers: ActiveUsersRow[]
+	dailyEvents: EventCountByPeriod[]
+	topKinds: KindSummary[]
+	kindActivityData: Record<string, KindActivityRow[]>
+	throughput: ThroughputStats | null
+	newUsers: NewUsersRow[]
+	newUsersWeekly: NewUsersRow[]
+	newUsersMonthly: NewUsersRow[]
+	retention: RetentionCohort[]
+	monthlyRetention: RetentionCohort[]
+	hourlyActivity: HourlyActivityRow[]
+	hourlyActivityByKind: Record<string, HourlyActivityRow[]>
+	zapStats30d: ZapStatsAggregate | null
+	zapStats90d: ZapStatsAggregate | null
+	zapStatsAllTime: ZapStatsAggregate | null
+	zapsByDay: ZapStatsByPeriod[]
+	zapHistogram: ZapHistogramBucket[]
+	engagement: EngagementStats | null
+	relayDistribution: RelayDistributionRow[]
 }
 
 // Kind names for common event types (from NIPs)

@@ -1,4 +1,4 @@
-import adapter from '@sveltejs/adapter-static'
+import adapter from '@sveltejs/adapter-vercel'
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte'
 
 /** @type {import('@sveltejs/kit').Config} */
@@ -8,17 +8,10 @@ const config = {
 	preprocess: vitePreprocess(),
 
 	kit: {
-		adapter: adapter({
-			// default options for static adapter
-			pages: 'build',
-			assets: 'build',
-			fallback: undefined,
-			precompress: false,
-			strict: true,
-		}),
+		adapter: adapter(),
 		paths: {
-			// For GitHub Pages: set base path to repo name when building for production
-			// Leave empty for custom domain or local development
+			// Leave empty for local development and typical Vercel deployments.
+			// BASE_PATH remains available if you ever mount the app under a subpath.
 			base: process.env.BASE_PATH || '',
 		},
 	},

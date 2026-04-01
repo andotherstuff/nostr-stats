@@ -1,6 +1,6 @@
 # Nostr Stats
 
-A SvelteKit dashboard that displays statistics from a Nostr relay/indexer backend. This is a static site designed for deployment to GitHub Pages.
+A SvelteKit dashboard that displays statistics from a Nostr relay/indexer backend. It now uses SvelteKit server routes so the upstream bearer token stays server-side.
 
 ## Overview
 
@@ -23,7 +23,7 @@ Nostr Stats provides a comprehensive view of Nostr network activity, including e
 - **Charts**: Chart.js
 - **Linting/Formatting**: Biome
 - **Package Manager**: Bun
-- **Deployment**: GitHub Pages (static adapter)
+- **Deployment**: Vercel (server-side rendering via adapter-vercel)
 - **Language**: TypeScript
 
 ## Prerequisites
@@ -87,16 +87,18 @@ bun run biome:fix        # Fix linting and formatting issues
 
 The app uses the following environment variables (set via `.env` or build arguments):
 
-- `VITE_API_URL` - Backend API URL (defaults to `http://localhost:8080`)
-- `VITE_API_TOKEN` - Optional API authentication token
-- `BASE_PATH` - Set during GitHub Pages build for correct asset paths
+- `PUBLIC_API_URL` - Backend API URL (defaults to `http://localhost:8080`)
+- `API_TOKEN` - Server-only bearer token for the upstream API
+- `BASE_PATH` - Optional subpath base if you mount the app below `/`
 
 Create a `.env` file in the root directory:
 
 ```env
-VITE_API_URL=http://localhost:8080
-VITE_API_TOKEN=your-token-here
+PUBLIC_API_URL=http://localhost:8080
+API_TOKEN=your-api-token-here
 ```
+
+> `API_TOKEN` must stay server-only. The repo includes a guard that fails `dev` and `build` if you accidentally define `VITE_API_TOKEN` or `PUBLIC_API_TOKEN`.
 
 ## Project Structure
 
@@ -131,50 +133,22 @@ src/
 
 ## Deployment
 
-This project is configured for static deployment to GitHub Pages using the `@sveltejs/adapter-static` adapter. The build process generates static HTML, CSS, and JavaScript files in the `build/` directory.
+This project is configured for server-side deployment using `@sveltejs/adapter-vercel`.
 
-### GitHub Pages Setup
+### Vercel setup
 
-#### Initial Setup
+Set these environment variables in Vercel:
 
-1. **Enable GitHub Pages in your repository:**
-   - Go to your repository on GitHub
-   - Navigate to **Settings** → **Pages**
-   - Under **Source**, select **GitHub Actions**
+- `PUBLIC_API_URL`
+- `API_TOKEN`
+- `BASE_PATH` (optional)
 
-2. **Configure repository secrets (optional):**
-   - Go to **Settings** → **Secrets and variables** → **Actions**
-   - Add secrets if needed:
-     - `VITE_API_URL` - Your backend API URL (defaults to `http://localhost:8080` if not set)
-     - `VITE_API_TOKEN` - Optional API authentication token
+The dashboard uses:
+- `src/routes/+page.server.ts` for the initial server-rendered payload
+- `src/routes/api/dashboard/+server.ts` for a single aggregated refresh endpoint
+- `src/lib/server/dashboard.ts` to fan out to the upstream Pensieve API in parallel
 
-#### Automated Deployment
-
-The project includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that automatically deploys to GitHub Pages when you push to the `master` branch.
-
-**The workflow will:**
-- Build the project with the correct `BASE_PATH` for your repository
-- Deploy the `build/` directory to GitHub Pages
-- Handle the repository name in the base path automatically
-
-**To deploy:**
-1. Push your changes to the `master` branch
-2. The workflow will run automatically
-3. Once complete, your site will be available at `https://<username>.github.io/<repository-name>/`
-
-#### Manual Deployment
-
-If you prefer to deploy manually:
-
-```bash
-# Build with the correct base path for your repository
-# Replace 'nostr-stats' with your actual repository name
-BASE_PATH=/nostr-stats bun run build
-
-# Then upload the build/ directory to GitHub Pages
-```
-
-**Note:** The `BASE_PATH` should match your repository name. For example, if your repository is `username/nostr-stats`, set `BASE_PATH=/nostr-stats`. If deploying to a custom domain, leave `BASE_PATH` empty.
+This keeps the bearer token off the client while also reducing the browser request waterfall.
 
 ## License
 

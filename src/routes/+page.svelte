@@ -3,39 +3,20 @@ import { onMount } from 'svelte'
 import { base } from '$app/paths'
 import {
 	type ActiveUsersRow,
-	type EventCountByPeriod,
+	type DashboardData,
 	type EngagementStats,
+	type EventCountByPeriod,
 	type HourlyActivityRow,
+	type KindActivityRow,
+	type KindSummary,
 	type NewUsersRow,
 	type RelayDistributionRow,
 	type RetentionCohort,
 	type ThroughputStats,
+	type ZapHistogramBucket,
 	type ZapStatsAggregate,
 	type ZapStatsByPeriod,
-	type ZapHistogramBucket,
-	getActiveUsersDaily,
-	getActiveUsersMonthly,
-	getActiveUsersWeekly,
-	getEngagement,
-	getEventsByDay,
-	getHourlyActivity,
-	getKinds,
-	getKindActivity,
-	getNewUsers,
 	getKindName,
-	getRelayDistribution,
-	getThroughput,
-	getUserRetention,
-	getZapStats,
-	getZapStatsByDay,
-	getZapHistogram,
-	getTotalEvents,
-	getTotalPubkeys,
-	getTotalKinds,
-	getEarliestEvent,
-	getLatestEvent,
-	type KindSummary,
-	type KindActivityRow,
 } from '$lib/api'
 import Chart from '$lib/components/Chart.svelte'
 import SortableTable from '$lib/components/SortableTable.svelte'
@@ -43,9 +24,11 @@ import LoadingSkeleton from '$lib/components/LoadingSkeleton.svelte'
 import InfoTooltip from '$lib/components/InfoTooltip.svelte'
 import { formatDate, formatNumber, formatSats, percentChange, formatPercent } from '$lib/format'
 
-// Header stats - separate loading for counts vs date range
-let headerCountsLoading = $state(true)
-let headerDatesLoading = $state(true)
+let { data }: { data: { dashboard: DashboardData } } = $props()
+
+// Header stats - hydrated from server-rendered dashboard payload
+let headerCountsLoading = $state(false)
+let headerDatesLoading = $state(false)
 let totalEvents = $state<number | null>(null)
 let totalPubkeys = $state<number | null>(null)
 let totalKinds = $state<number | null>(null)
@@ -54,22 +37,23 @@ let latestEvent = $state<number | null>(null)
 let lastUpdated = $state<Date | null>(null)
 
 // Section loading states
-let dauChartLoading = $state(true)
-let wauChartLoading = $state(true)
-let mauChartLoading = $state(true)
-let newUsersLoading = $state(true)
-let newUsersChartLoading = $state(true)
-let retentionLoading = $state(true)
-let monthlyRetentionLoading = $state(true)
-let zapsSummaryLoading = $state(true)
-let zapsChartLoading = $state(true)
-let zapsHistogramLoading = $state(true)
-let engagementLoading = $state(true)
-let throughputLoading = $state(true)
-let hourlyActivityLoading = $state(true)
-let dailyEventsLoading = $state(true)
-let topKindsLoading = $state(true)
-let relayDistributionLoading = $state(true)
+let dauChartLoading = $state(false)
+let wauChartLoading = $state(false)
+let mauChartLoading = $state(false)
+let newUsersLoading = $state(false)
+let newUsersChartLoading = $state(false)
+let retentionLoading = $state(false)
+let monthlyRetentionLoading = $state(false)
+let zapsSummaryLoading = $state(false)
+let zapsChartLoading = $state(false)
+let zapsHistogramLoading = $state(false)
+let engagementLoading = $state(false)
+let throughputLoading = $state(false)
+let hourlyActivityLoading = $state(false)
+let dailyEventsLoading = $state(false)
+let topKindsLoading = $state(false)
+let relayDistributionLoading = $state(false)
+let refreshing = $state(false)
 
 // Data
 let dailyActiveUsers = $state<ActiveUsersRow[]>([])
@@ -502,288 +486,98 @@ const histogramData = $derived([
 	{ label: 'Zap Count', data: zapHistogram.map((b) => b.count), color: '#e69f00', fill: true },
 ])
 
-// Helper to safely fetch with fallback
-async function safeFetch<T>(promise: Promise<T>, fallback: T): Promise<T> {
-	try {
-		return await promise
-	} catch (e) {
-		console.warn('API call failed:', e)
-		return fallback
-	}
+function recordToKindActivityMap(record: Record<string, KindActivityRow[]>): Map<number, KindActivityRow[]> {
+	return new Map(Object.entries(record).map(([key, value]) => [Number(key), value] as const))
 }
 
-// Independent data loaders - each runs in parallel
-async function loadHeaderCounts() {
-	headerCountsLoading = true
-	try {
-		const [events, pubkeys, kinds] = await Promise.all([
-			getTotalEvents(),
-			getTotalPubkeys(),
-			getTotalKinds(),
-		])
-		totalEvents = events.count
-		totalPubkeys = pubkeys.count
-		totalKinds = kinds.count
-		lastUpdated = new Date()
-	} catch (e) {
-		console.warn('Header counts failed:', e)
-	} finally {
-		headerCountsLoading = false
-	}
+function recordToHourlyActivityMap(record: Record<string, HourlyActivityRow[]>): Map<number | 'all', HourlyActivityRow[]> {
+	const entries = Object.entries(record).map(([key, value]) => [key === 'all' ? 'all' : Number(key), value] as const)
+	return new Map(entries)
 }
 
-async function loadHeaderDates() {
-	headerDatesLoading = true
-	try {
-		const [earliest, latest] = await Promise.all([
-			getEarliestEvent(),
-			getLatestEvent(),
-		])
-		earliestEvent = earliest.timestamp
-		latestEvent = latest.timestamp
-	} catch (e) {
-		console.warn('Header dates failed:', e)
-	} finally {
-		headerDatesLoading = false
-	}
+function applyDashboardData(dashboard: DashboardData): void {
+	totalEvents = dashboard.totalEvents
+	totalPubkeys = dashboard.totalPubkeys
+	totalKinds = dashboard.totalKinds
+	earliestEvent = dashboard.earliestEvent
+	latestEvent = dashboard.latestEvent
+	lastUpdated = new Date(dashboard.generatedAt)
+	dailyActiveUsers = dashboard.dailyActiveUsers
+	weeklyActiveUsers = dashboard.weeklyActiveUsers
+	monthlyActiveUsers = dashboard.monthlyActiveUsers
+	dailyEvents = dashboard.dailyEvents
+	topKinds = dashboard.topKinds
+	kindActivityData = recordToKindActivityMap(dashboard.kindActivityData)
+	throughput = dashboard.throughput
+	newUsers = dashboard.newUsers
+	newUsersWeekly = dashboard.newUsersWeekly
+	newUsersMonthly = dashboard.newUsersMonthly
+	retention = dashboard.retention
+	monthlyRetention = dashboard.monthlyRetention
+	hourlyActivity = dashboard.hourlyActivity
+	hourlyActivityByKind = recordToHourlyActivityMap(dashboard.hourlyActivityByKind)
+	zapStats30d = dashboard.zapStats30d
+	zapStats90d = dashboard.zapStats90d
+	zapStatsAllTime = dashboard.zapStatsAllTime
+	zapsByDay = dashboard.zapsByDay
+	zapHistogram = dashboard.zapHistogram
+	engagement = dashboard.engagement
+	relayDistribution = dashboard.relayDistribution
 }
 
+$effect(() => {
+	applyDashboardData(data.dashboard)
+})
 
-async function loadDauChart() {
-	dauChartLoading = true
-	try {
-		dailyActiveUsers = await getActiveUsersDaily(60)
-	} catch (e) {
-		console.warn('DAU chart failed:', e)
-	} finally {
-		dauChartLoading = false
+function scheduleRelayChecks(): void {
+	relayStatus = new Map()
+	const runChecks = () => {
+		if (relayDistribution.length > 0) {
+			checkAllRelays()
+		}
 	}
+
+	if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+		window.requestIdleCallback(runChecks, { timeout: 1500 })
+		return
+	}
+
+	setTimeout(runChecks, 100)
 }
 
-async function loadWauChart() {
-	wauChartLoading = true
-	try {
-		weeklyActiveUsers = await getActiveUsersWeekly(24)
-	} catch (e) {
-		console.warn('WAU chart failed:', e)
-	} finally {
-		wauChartLoading = false
+async function fetchDashboard(): Promise<DashboardData> {
+	const res = await fetch(`${base}/api/dashboard`, {
+		cache: 'no-store',
+	})
+
+	if (!res.ok) {
+		throw new Error(`Dashboard refresh failed: ${res.status} ${res.statusText}`)
 	}
+
+	return res.json()
 }
 
-async function loadMauChart() {
-	mauChartLoading = true
-	try {
-		monthlyActiveUsers = await getActiveUsersMonthly(24)
-	} catch (e) {
-		console.warn('MAU chart failed:', e)
-	} finally {
-		mauChartLoading = false
-	}
-}
-
-async function loadNewUsers() {
-	newUsersLoading = true
-	newUsersChartLoading = true
-	try {
-		const [daily, weekly, monthly] = await Promise.all([
-			getNewUsers('day', 92),
-			getNewUsers('week', 26),
-			getNewUsers('month', 24),
-		])
-		newUsers = daily
-		newUsersWeekly = weekly
-		newUsersMonthly = monthly
-	} catch (e) {
-		console.warn('New users failed:', e)
-	} finally {
-		newUsersLoading = false
-		newUsersChartLoading = false
-	}
-}
-
-async function loadRetention() {
-	retentionLoading = true
-	monthlyRetentionLoading = true
-	try {
-		const [weeklyData, monthlyData] = await Promise.all([
-			getUserRetention('week', 12),
-			getUserRetention('month', 12),
-		])
-		retention = weeklyData
-		monthlyRetention = monthlyData
-	} catch (e) {
-		console.warn('Retention failed:', e)
-	} finally {
-		retentionLoading = false
-		monthlyRetentionLoading = false
-	}
-}
-
-async function loadZapsSummary() {
-	zapsSummaryLoading = true
-	try {
-		const [stats30d, stats90d, statsAllTime] = await Promise.all([
-			safeFetch(getZapStats(30), null),
-			safeFetch(getZapStats(90), null),
-			safeFetch(getZapStats(10000), null),
-		])
-		zapStats30d = stats30d
-		zapStats90d = stats90d
-		zapStatsAllTime = statsAllTime
-	} catch (e) {
-		console.warn('Zaps summary failed:', e)
-	} finally {
-		zapsSummaryLoading = false
-	}
-}
-
-async function loadZapsChart() {
-	zapsChartLoading = true
-	try {
-		zapsByDay = await getZapStatsByDay(31, 31)
-	} catch (e) {
-		console.warn('Zaps chart failed:', e)
-	} finally {
-		zapsChartLoading = false
-	}
-}
-
-async function loadZapsHistogram() {
-	zapsHistogramLoading = true
-	try {
-		zapHistogram = await getZapHistogram(30)
-	} catch (e) {
-		console.warn('Zaps histogram failed:', e)
-	} finally {
-		zapsHistogramLoading = false
-	}
-}
-
-async function loadEngagement() {
-	engagementLoading = true
-	try {
-		engagement = await getEngagement(30)
-	} catch (e) {
-		console.warn('Engagement failed:', e)
-	} finally {
-		engagementLoading = false
-	}
-}
-
-async function loadThroughput() {
-	throughputLoading = true
-	try {
-		throughput = await getThroughput()
-	} catch (e) {
-		console.warn('Throughput failed:', e)
-	} finally {
-		throughputLoading = false
-	}
-}
-
-async function loadHourlyActivity() {
-	hourlyActivityLoading = true
-	try {
-		// Load hourly activity for all events and specific kinds
-		const kinds = [1, 0, 3, 6, 7, 9735] as const
-		const [allActivity, ...kindActivities] = await Promise.all([
-			getHourlyActivity(7),
-			...kinds.map((k) => safeFetch(getHourlyActivity(7, k), [])),
-		])
-		hourlyActivity = allActivity
-
-		const activityMap = new Map<number | 'all', HourlyActivityRow[]>()
-		activityMap.set('all', allActivity)
-		kinds.forEach((k, i) => activityMap.set(k, kindActivities[i]))
-		hourlyActivityByKind = activityMap
-	} catch (e) {
-		console.warn('Hourly activity failed:', e)
-	} finally {
-		hourlyActivityLoading = false
-	}
-}
-
-async function loadDailyEvents() {
-	dailyEventsLoading = true
-	try {
-		dailyEvents = await getEventsByDay(30)
-	} catch (e) {
-		console.warn('Daily events failed:', e)
-	} finally {
-		dailyEventsLoading = false
-	}
-}
-
-async function loadTopKinds() {
-	topKindsLoading = true
-	try {
-		const kindsData = await getKinds(50)
-		topKinds = kindsData
-
-		// Load kind activity data for stacked chart
-		const top10 = kindsData.slice(0, 10)
-		const activityResults = await Promise.all(
-			top10.map((k) => safeFetch(getKindActivity(k.kind, 30), []))
-		)
-		const activityMap = new Map<number, KindActivityRow[]>()
-		top10.forEach((k, i) => activityMap.set(k.kind, activityResults[i]))
-		kindActivityData = activityMap
-	} catch (e) {
-		console.warn('Top kinds failed:', e)
-	} finally {
-		topKindsLoading = false
-	}
-}
-
-async function loadRelayDistribution() {
-	relayDistributionLoading = true
-	try {
-		relayDistribution = await getRelayDistribution(50)
-		// Kick off non-blocking reachability checks
-		checkAllRelays()
-	} catch (e) {
-		console.warn('Relay distribution failed:', e)
-	} finally {
-		relayDistributionLoading = false
-	}
-}
-
-// Load all data in parallel - each section loads independently
 async function loadAllData() {
+	if (refreshing) return
+	refreshing = true
 	globalError = null
 
-	// Fire off all loaders in parallel - they each manage their own loading state
-	await Promise.all([
-		loadHeaderCounts(),
-		loadHeaderDates(),
-		loadDauChart(),
-		loadWauChart(),
-		loadMauChart(),
-		loadNewUsers(),
-		loadRetention(),
-		loadZapsSummary(),
-		loadZapsChart(),
-		loadZapsHistogram(),
-		loadEngagement(),
-		loadThroughput(),
-		loadHourlyActivity(),
-		loadDailyEvents(),
-		loadTopKinds(),
-		loadRelayDistribution(),
-	])
+	try {
+		const dashboard = await fetchDashboard()
+		applyDashboardData(dashboard)
+		scheduleRelayChecks()
+	} catch (error) {
+		console.warn('Dashboard refresh failed:', error)
+		globalError = error instanceof Error ? error.message : 'Failed to refresh dashboard data.'
+	} finally {
+		refreshing = false
+	}
 }
 
-// Check if any section is still loading
-const isAnyLoading = $derived(
-	headerCountsLoading || headerDatesLoading || dauChartLoading || wauChartLoading ||
-	mauChartLoading || newUsersLoading || retentionLoading || monthlyRetentionLoading || zapsSummaryLoading ||
-	zapsChartLoading || zapsHistogramLoading || engagementLoading || throughputLoading ||
-	hourlyActivityLoading || dailyEventsLoading || topKindsLoading || relayDistributionLoading
-)
+const isAnyLoading = $derived(refreshing)
 
 onMount(() => {
-	loadAllData()
+	scheduleRelayChecks()
 	const interval = setInterval(loadAllData, 5 * 60 * 1000)
 	return () => clearInterval(interval)
 })
