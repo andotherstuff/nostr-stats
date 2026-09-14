@@ -290,23 +290,16 @@ export interface DashboardData {
 	dailyActiveUsers: ActiveUsersRow[]
 	weeklyActiveUsers: ActiveUsersRow[]
 	monthlyActiveUsers: ActiveUsersRow[]
-	dailyEvents: EventCountByPeriod[]
-	topKinds: KindSummary[]
-	kindActivityData: Record<string, KindActivityRow[]>
 	throughput: ThroughputStats | null
 	newUsers: NewUsersRow[]
 	newUsersWeekly: NewUsersRow[]
 	newUsersMonthly: NewUsersRow[]
-	retention: RetentionCohort[]
-	monthlyRetention: RetentionCohort[]
 	hourlyActivity: HourlyActivityRow[]
-	hourlyActivityByKind: Record<string, HourlyActivityRow[]>
 	zapStats30d: ZapStatsAggregate | null
 	zapStats90d: ZapStatsAggregate | null
 	zapStatsAllTime: ZapStatsAggregate | null
 	zapsByDay: ZapStatsByPeriod[]
 	zapHistogram: ZapHistogramBucket[]
-	engagement: EngagementStats | null
 	relayDistribution: RelayDistributionRow[]
 }
 

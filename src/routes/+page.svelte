@@ -4,22 +4,15 @@ import { base } from '$app/paths'
 import {
 	type ActiveUsersRow,
 	type DashboardData,
-	type EngagementStats,
-	type EventCountByPeriod,
 	type HourlyActivityRow,
-	type KindActivityRow,
-	type KindSummary,
 	type NewUsersRow,
 	type RelayDistributionRow,
-	type RetentionCohort,
 	type ThroughputStats,
 	type ZapHistogramBucket,
 	type ZapStatsAggregate,
 	type ZapStatsByPeriod,
-	getKindName,
 } from '$lib/api'
 import Chart from '$lib/components/Chart.svelte'
-import SortableTable from '$lib/components/SortableTable.svelte'
 import LoadingSkeleton from '$lib/components/LoadingSkeleton.svelte'
 import InfoTooltip from '$lib/components/InfoTooltip.svelte'
 import { formatDate, formatNumber, formatSats, percentChange, formatPercent } from '$lib/format'
@@ -42,16 +35,11 @@ let wauChartLoading = $state(false)
 let mauChartLoading = $state(false)
 let newUsersLoading = $state(false)
 let newUsersChartLoading = $state(false)
-let retentionLoading = $state(false)
-let monthlyRetentionLoading = $state(false)
 let zapsSummaryLoading = $state(false)
 let zapsChartLoading = $state(false)
 let zapsHistogramLoading = $state(false)
-let engagementLoading = $state(false)
 let throughputLoading = $state(false)
 let hourlyActivityLoading = $state(false)
-let dailyEventsLoading = $state(false)
-let topKindsLoading = $state(false)
 let relayDistributionLoading = $state(false)
 let refreshing = $state(false)
 
@@ -59,31 +47,20 @@ let refreshing = $state(false)
 let dailyActiveUsers = $state<ActiveUsersRow[]>([])
 let weeklyActiveUsers = $state<ActiveUsersRow[]>([])
 let monthlyActiveUsers = $state<ActiveUsersRow[]>([])
-let dailyEvents = $state<EventCountByPeriod[]>([])
-let topKinds = $state<KindSummary[]>([])
-let kindActivityData = $state<Map<number, KindActivityRow[]>>(new Map())
 let throughput = $state<ThroughputStats | null>(null)
 let newUsers = $state<NewUsersRow[]>([])
 let newUsersWeekly = $state<NewUsersRow[]>([])
 let newUsersMonthly = $state<NewUsersRow[]>([])
-let retention = $state<RetentionCohort[]>([])
-let monthlyRetention = $state<RetentionCohort[]>([])
 let hourlyActivity = $state<HourlyActivityRow[]>([])
-let hourlyActivityByKind = $state<Map<number | 'all', HourlyActivityRow[]>>(new Map())
-let hourlyActivityTab = $state<'all' | 1 | 0 | 3 | 6 | 7 | 9735>('all')
 let zapStats30d = $state<ZapStatsAggregate | null>(null)
 let zapStats90d = $state<ZapStatsAggregate | null>(null)
 let zapStatsAllTime = $state<ZapStatsAggregate | null>(null)
 let zapsByDay = $state<ZapStatsByPeriod[]>([])
 let zapHistogram = $state<ZapHistogramBucket[]>([])
-let engagement = $state<EngagementStats | null>(null)
 let relayDistribution = $state<RelayDistributionRow[]>([])
 
 // Relay reachability status: 'checking' | 'reachable' | 'unreachable'
 let relayStatus = $state<Map<string, 'checking' | 'reachable' | 'unreachable'>>(new Map())
-
-// Retention tab state
-let retentionTab = $state<'weekly' | 'monthly'>('weekly')
 
 // Check if a relay is reachable via WebSocket (non-blocking)
 // Note: Browser console will still show connection errors for unreachable relays -
@@ -153,65 +130,6 @@ function checkAllRelays(): void {
 // Global error state
 let globalError = $state<string | null>(null)
 
-// Colorblind-safe chart palette (based on Wong's accessible palette, adjusted for dark backgrounds)
-// These colors are distinguishable for deuteranopia, protanopia, and tritanopia
-const KIND_COLORS = [
-	'#56b4e9', // sky blue
-	'#e69f00', // orange
-	'#cc79a7', // reddish purple/pink
-	'#009e73', // bluish green
-	'#f0e442', // yellow
-	'#0072b2', // blue
-	'#d55e00', // vermillion/red-orange
-	'#999999', // gray
-	'#88ccee', // light blue
-	'#ddcc77', // sand/tan
-]
-
-// Colorblind-safe sequential heatmap color (blue → yellow/orange)
-// Uses luminance AND hue changes for accessibility
-function getHeatmapColor(pct: number): { bg: string; text: string } {
-	// Normalize to 0-1 range
-	const t = Math.min(Math.max(pct / 100, 0), 1)
-
-	// Sequential scale: dark blue (low) → teal → yellow/orange (high)
-	// These colors are perceptually uniform and colorblind-safe
-	let r: number, g: number, b: number
-
-	if (t < 0.25) {
-		// Dark blue to medium blue (0-25%)
-		const s = t / 0.25
-		r = Math.round(30 + s * 20)
-		g = Math.round(50 + s * 60)
-		b = Math.round(80 + s * 60)
-	} else if (t < 0.5) {
-		// Medium blue to teal (25-50%)
-		const s = (t - 0.25) / 0.25
-		r = Math.round(50 + s * 0)
-		g = Math.round(110 + s * 50)
-		b = Math.round(140 - s * 20)
-	} else if (t < 0.75) {
-		// Teal to yellow-green (50-75%)
-		const s = (t - 0.5) / 0.25
-		r = Math.round(50 + s * 130)
-		g = Math.round(160 + s * 40)
-		b = Math.round(120 - s * 70)
-	} else {
-		// Yellow-green to orange (75-100%)
-		const s = (t - 0.75) / 0.25
-		r = Math.round(180 + s * 50)
-		g = Math.round(200 - s * 60)
-		b = Math.round(50 - s * 30)
-	}
-
-	const bg = `rgb(${r}, ${g}, ${b})`
-	// Text color: dark for bright backgrounds, light for dark backgrounds
-	const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-	const text = luminance > 0.5 ? '#1e293b' : '#f1f5f9'
-
-	return { bg, text }
-}
-
 // DAU breakdown chart - skip index 0 (current incomplete day), show last 30 complete days
 const dauChartLabels = $derived(
 	dailyActiveUsers.slice(1, 31).reverse().map((d) => {
@@ -256,48 +174,6 @@ const mauChartData = $derived([
 	{ label: 'With Follows', data: monthlyActiveUsers.slice(1, 25).reverse().map((d) => d.has_follows_list), color: '#cc79a7', fill: false },
 	{ label: 'Profile + Follows', data: monthlyActiveUsers.slice(1, 25).reverse().map((d) => d.has_profile_and_follows_list), color: '#009e73', fill: false },
 ])
-
-// Daily events stacked bar chart
-const eventsChartLabels = $derived(
-	dailyEvents.slice(0, 30).reverse().map((d) => {
-		const date = new Date(d.period)
-		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-	})
-)
-
-const eventsStackedData = $derived(() => {
-	const top10Kinds = topKinds.slice(0, 10)
-	const periods = dailyEvents.slice(0, 30).reverse().map((d) => d.period)
-
-	const datasets = top10Kinds.map((kind, idx) => {
-		const activity = kindActivityData.get(kind.kind) || []
-		const data = periods.map((period) => {
-			const match = activity.find((a) => a.period === period)
-			return match?.event_count ?? 0
-		})
-		return {
-			label: getKindName(kind.kind),
-			data,
-			color: KIND_COLORS[idx % KIND_COLORS.length],
-			fill: true,
-		}
-	})
-
-	const otherData = periods.map((period, i) => {
-		const total = dailyEvents.slice(0, 30).reverse()[i]?.count ?? 0
-		const known = datasets.reduce((sum, ds) => sum + ds.data[i], 0)
-		return Math.max(0, total - known)
-	})
-
-	datasets.push({
-		label: 'Other',
-		data: otherData,
-		color: '#64748b',
-		fill: true,
-	})
-
-	return datasets
-})
 
 // Calculate % changes for active users (comparing last complete period vs previous)
 const dauChange = $derived(() => {
@@ -387,81 +263,6 @@ const hourlyData = $derived([
 	{ label: 'Avg Events/Day', data: hourlyActivity.map((d) => d.avg_per_day), color: '#cc79a7', fill: true },
 ])
 
-// Hourly activity data for the selected kind tab
-const selectedHourlyActivity = $derived(() => {
-	return hourlyActivityByKind.get(hourlyActivityTab) ?? hourlyActivity
-})
-
-const selectedHourlyLabels = $derived(() => {
-	const data = selectedHourlyActivity()
-	return data.map((d) => `${d.hour.toString().padStart(2, '0')}:00`)
-})
-
-const selectedHourlyData = $derived(() => {
-	const data = selectedHourlyActivity()
-	const kindName = hourlyActivityTab === 'all' ? 'All Events' : `Kind ${hourlyActivityTab}`
-	return [{ label: `${kindName} Avg/Day`, data: data.map((d) => d.avg_per_day), color: '#cc79a7', fill: true }]
-})
-
-// Kind names for tabs
-const HOURLY_TAB_LABELS: Record<'all' | 1 | 0 | 3 | 6 | 7 | 9735, string> = {
-	all: 'All',
-	1: 'Notes',
-	0: 'Profiles',
-	3: 'Follows',
-	6: 'Reposts',
-	7: 'Reactions',
-	9735: 'Zaps',
-}
-
-// Weekly retention chart data - each cohort as a line, weeks on x-axis
-const weeklyRetentionLabels = $derived(() => {
-	const maxWeeks = Math.min(8, Math.max(...retention.map((r) => r.retention_pct.length), 0))
-	return Array.from({ length: maxWeeks }, (_, i) => `W${i}`)
-})
-
-// Extended color palette for 12 cohort lines
-const COHORT_COLORS = [
-	'#56b4e9', // sky blue
-	'#e69f00', // orange
-	'#cc79a7', // reddish purple/pink
-	'#009e73', // bluish green
-	'#f0e442', // yellow
-	'#0072b2', // blue
-	'#d55e00', // vermillion/red-orange
-	'#88ccee', // light blue
-	'#ddcc77', // sand/tan
-	'#44aa99', // teal
-	'#aa4499', // purple
-	'#882255', // wine
-]
-
-const weeklyRetentionChartData = $derived(() => {
-	// Show all 12 cohorts to match the table
-	return retention.slice(0, 12).map((cohort, idx) => ({
-		label: new Date(cohort.cohort).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-		data: cohort.retention_pct.slice(0, 8),
-		color: COHORT_COLORS[idx % COHORT_COLORS.length],
-		fill: false,
-	}))
-})
-
-// Monthly retention chart data
-const monthlyRetentionLabels = $derived(() => {
-	const maxMonths = Math.min(8, Math.max(...monthlyRetention.map((r) => r.retention_pct.length), 0))
-	return Array.from({ length: maxMonths }, (_, i) => `M${i}`)
-})
-
-const monthlyRetentionChartData = $derived(() => {
-	// Show all 12 cohorts to match the table
-	return monthlyRetention.slice(0, 12).map((cohort, idx) => ({
-		label: new Date(cohort.cohort).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
-		data: cohort.retention_pct.slice(0, 8),
-		color: COHORT_COLORS[idx % COHORT_COLORS.length],
-		fill: false,
-	}))
-})
-
 // Zaps chart data
 // Zaps chart - skip index 0 (current incomplete day), show last 30 complete days
 const zapsLabels = $derived(
@@ -486,15 +287,6 @@ const histogramData = $derived([
 	{ label: 'Zap Count', data: zapHistogram.map((b) => b.count), color: '#e69f00', fill: true },
 ])
 
-function recordToKindActivityMap(record: Record<string, KindActivityRow[]>): Map<number, KindActivityRow[]> {
-	return new Map(Object.entries(record).map(([key, value]) => [Number(key), value] as const))
-}
-
-function recordToHourlyActivityMap(record: Record<string, HourlyActivityRow[]>): Map<number | 'all', HourlyActivityRow[]> {
-	const entries = Object.entries(record).map(([key, value]) => [key === 'all' ? 'all' : Number(key), value] as const)
-	return new Map(entries)
-}
-
 function applyDashboardData(dashboard: DashboardData): void {
 	totalEvents = dashboard.totalEvents
 	totalPubkeys = dashboard.totalPubkeys
@@ -505,23 +297,16 @@ function applyDashboardData(dashboard: DashboardData): void {
 	dailyActiveUsers = dashboard.dailyActiveUsers
 	weeklyActiveUsers = dashboard.weeklyActiveUsers
 	monthlyActiveUsers = dashboard.monthlyActiveUsers
-	dailyEvents = dashboard.dailyEvents
-	topKinds = dashboard.topKinds
-	kindActivityData = recordToKindActivityMap(dashboard.kindActivityData)
 	throughput = dashboard.throughput
 	newUsers = dashboard.newUsers
 	newUsersWeekly = dashboard.newUsersWeekly
 	newUsersMonthly = dashboard.newUsersMonthly
-	retention = dashboard.retention
-	monthlyRetention = dashboard.monthlyRetention
 	hourlyActivity = dashboard.hourlyActivity
-	hourlyActivityByKind = recordToHourlyActivityMap(dashboard.hourlyActivityByKind)
 	zapStats30d = dashboard.zapStats30d
 	zapStats90d = dashboard.zapStats90d
 	zapStatsAllTime = dashboard.zapStatsAllTime
 	zapsByDay = dashboard.zapsByDay
 	zapHistogram = dashboard.zapHistogram
-	engagement = dashboard.engagement
 	relayDistribution = dashboard.relayDistribution
 }
 
@@ -674,7 +459,7 @@ onMount(() => {
 				<div class="mb-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
 					<div class="rounded-lg border border-violet-500/20 bg-slate-900/50 p-3">
 						<div class="flex items-center justify-between text-sm text-slate-400">
-							<span>Publishing Yesterday<InfoTooltip text="Unique pubkeys that published at least one event yesterday (last complete day). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
+							<span>Publishing Yesterday<InfoTooltip text="Unique pubkeys that published at least one event yesterday (last complete day). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys." /></span>
 							<span class="rounded bg-violet-500/20 px-1.5 py-0.5 text-violet-400">DPU</span>
 						</div>
 						<div class="mt-1.5 flex items-baseline gap-2">
@@ -683,16 +468,11 @@ onMount(() => {
 								<span class="text-sm {dauChange()! >= 0 ? 'text-emerald-400' : 'text-rose-400'}">{formatPercent(dauChange()!)}</span>
 							{/if}
 						</div>
-						<div class="mt-2 text-sm text-slate-500 space-y-1">
-							<div class="flex justify-between"><span>w/ profile</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteDay.has_profile)}</span></div>
-							<div class="flex justify-between"><span>w/ follows</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteDay.has_follows_list)}</span></div>
-							<div class="flex justify-between"><span>w/ both</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteDay.has_profile_and_follows_list)}</span></div>
-						</div>
 					</div>
 
 					<div class="rounded-lg border border-cyan-500/20 bg-slate-900/50 p-3">
 						<div class="flex items-center justify-between text-sm text-slate-400">
-							<span>Publishing Last Week<InfoTooltip text="Unique pubkeys that published at least one event last week (last complete 7-day period). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
+							<span>Publishing Last Week<InfoTooltip text="Unique pubkeys that published at least one event last week (last complete 7-day period). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys." /></span>
 							<span class="rounded bg-cyan-500/20 px-1.5 py-0.5 text-cyan-400">WPU</span>
 						</div>
 						<div class="mt-1.5 flex items-baseline gap-2">
@@ -701,16 +481,11 @@ onMount(() => {
 								<span class="text-sm {wauChange()! >= 0 ? 'text-emerald-400' : 'text-rose-400'}">{formatPercent(wauChange()!)}</span>
 							{/if}
 						</div>
-						<div class="mt-2 text-sm text-slate-500 space-y-1">
-							<div class="flex justify-between"><span>w/ profile</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteWeek.has_profile)}</span></div>
-							<div class="flex justify-between"><span>w/ follows</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteWeek.has_follows_list)}</span></div>
-							<div class="flex justify-between"><span>w/ both</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteWeek.has_profile_and_follows_list)}</span></div>
-						</div>
 					</div>
 
 					<div class="rounded-lg border border-pink-500/20 bg-slate-900/50 p-3">
 						<div class="flex items-center justify-between text-sm text-slate-400">
-							<span>Publishing Last Month<InfoTooltip text="Unique pubkeys that published at least one event last month (last complete calendar month). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys. Breakdown shows users with profile metadata (kind 0), follow lists (kind 3), or both." /></span>
+							<span>Publishing Last Month<InfoTooltip text="Unique pubkeys that published at least one event last month (last complete calendar month). Excludes kinds 1059 (gift wraps) and 445 (Marmot) which use single-use keys." /></span>
 							<span class="rounded bg-pink-500/20 px-1.5 py-0.5 text-pink-400">MPU</span>
 						</div>
 						<div class="mt-1.5 flex items-baseline gap-2">
@@ -718,11 +493,6 @@ onMount(() => {
 							{#if mauChange() !== null}
 								<span class="text-sm {mauChange()! >= 0 ? 'text-emerald-400' : 'text-rose-400'}">{formatPercent(mauChange()!)}</span>
 							{/if}
-						</div>
-						<div class="mt-2 text-sm text-slate-500 space-y-1">
-							<div class="flex justify-between"><span>w/ profile</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteMonth.has_profile)}</span></div>
-							<div class="flex justify-between"><span>w/ follows</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteMonth.has_follows_list)}</span></div>
-							<div class="flex justify-between"><span>w/ both</span><span class="font-mono text-slate-400">{formatNumber(lastCompleteMonth.has_profile_and_follows_list)}</span></div>
 						</div>
 					</div>
 				</div>
@@ -853,147 +623,6 @@ onMount(() => {
 				{/if}
 			</div>
 		</section>
-
-		<!-- User Retention Section -->
-		<section class="mb-12">
-			<h2 class="mb-4">
-				<div class="text-2xl sm:text-3xl font-bold tracking-tight text-orange-400">User Retention</div>
-				<div class="mt-1 text-xs font-normal text-slate-500">Cohort analysis of returning users</div>
-			</h2>
-
-			<!-- Tab Switcher -->
-			<div class="mb-4 flex gap-1 rounded-lg bg-slate-800/50 p-1 w-fit">
-				<button
-					onclick={() => retentionTab = 'weekly'}
-					class="px-4 py-1.5 text-sm font-medium rounded-md transition-colors {retentionTab === 'weekly' ? 'bg-orange-500/20 text-orange-400' : 'text-slate-400 hover:text-slate-300'}"
-				>
-					Weekly
-				</button>
-				<button
-					onclick={() => retentionTab = 'monthly'}
-					class="px-4 py-1.5 text-sm font-medium rounded-md transition-colors {retentionTab === 'monthly' ? 'bg-orange-500/20 text-orange-400' : 'text-slate-400 hover:text-slate-300'}"
-				>
-					Monthly
-				</button>
-			</div>
-
-			<!-- Weekly Retention -->
-			{#if retentionTab === 'weekly'}
-				{#if retentionLoading}
-					<div class="mb-3">
-						<LoadingSkeleton type="table" rows={8} />
-					</div>
-				{:else if retention.length > 0}
-					<!-- Weekly Retention Chart -->
-					<div class="mb-3 rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
-						<h3 class="mb-2 text-sm font-semibold text-slate-400">Retention by Cohort<InfoTooltip text="Line chart showing retention rates for each weekly cohort. Each line represents users who joined in that week, showing what percentage returned in subsequent weeks." /></h3>
-						<Chart labels={weeklyRetentionLabels()} datasets={weeklyRetentionChartData()} height={220} isPercent={true} />
-					</div>
-
-					<!-- Weekly Retention Table -->
-					<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
-						<h3 class="mb-2 text-sm font-semibold text-slate-400">Retention Table<InfoTooltip text="Cohort retention analysis. Each row represents users who first appeared in that week. Columns show what percentage of those users returned in subsequent weeks." /></h3>
-						<div class="overflow-x-auto -mx-3 px-3">
-							<table class="w-full text-xs sm:text-sm min-w-[400px]">
-								<thead>
-									<tr class="border-b border-slate-700/50 text-left text-[10px] sm:text-xs uppercase tracking-wider text-slate-500">
-										<th class="py-2 pr-3 whitespace-nowrap">Cohort</th>
-										<th class="py-2 px-2 text-right whitespace-nowrap">Size</th>
-										{#each Array(Math.min(8, Math.max(...retention.map(r => r.retention_pct.length)))) as _, i}
-											<th class="py-2 px-2 text-right">W{i}</th>
-										{/each}
-									</tr>
-								</thead>
-								<tbody>
-									{#each retention.slice(0, 12) as cohort}
-										<tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
-											<td class="py-1.5 pr-3 font-mono text-slate-300 whitespace-nowrap">
-												{new Date(cohort.cohort).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-											</td>
-											<td class="py-1.5 px-2 text-right font-mono text-slate-400">{formatNumber(cohort.cohort_size)}</td>
-											{#each cohort.retention_pct.slice(0, 8) as pct, i}
-												{@const colors = getHeatmapColor(pct)}
-												<td
-													class="py-1.5 px-2 text-right font-mono font-medium"
-													style="background-color: {colors.bg}; color: {colors.text}"
-												>
-													{pct.toFixed(0)}%
-												</td>
-											{/each}
-											{#each Array(Math.max(0, 8 - cohort.retention_pct.length)) as _}
-												<td class="py-1.5 px-2 text-right text-slate-600">-</td>
-											{/each}
-										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
-						<div class="mt-2 text-xs text-slate-500">
-							W0 = first week (always 100%), W1+ = subsequent weeks. Blue to Yellow/Orange = higher retention.
-						</div>
-					</div>
-				{/if}
-			{/if}
-
-			<!-- Monthly Retention -->
-			{#if retentionTab === 'monthly'}
-				{#if monthlyRetentionLoading}
-					<div class="mb-3">
-						<LoadingSkeleton type="table" rows={8} />
-					</div>
-				{:else if monthlyRetention.length > 0}
-					<!-- Monthly Retention Chart -->
-					<div class="mb-3 rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
-						<h3 class="mb-2 text-sm font-semibold text-slate-400">Retention by Cohort<InfoTooltip text="Line chart showing retention rates for each monthly cohort. Each line represents users who joined in that month, showing what percentage returned in subsequent months." /></h3>
-						<Chart labels={monthlyRetentionLabels()} datasets={monthlyRetentionChartData()} height={220} isPercent={true} />
-					</div>
-
-					<!-- Monthly Retention Table -->
-					<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
-						<h3 class="mb-2 text-sm font-semibold text-slate-400">Retention Table<InfoTooltip text="Cohort retention analysis. Each row represents users who first appeared in that month. Columns show what percentage of those users returned in subsequent months." /></h3>
-						<div class="overflow-x-auto -mx-3 px-3">
-							<table class="w-full text-xs sm:text-sm min-w-[400px]">
-								<thead>
-									<tr class="border-b border-slate-700/50 text-left text-[10px] sm:text-xs uppercase tracking-wider text-slate-500">
-										<th class="py-2 pr-3 whitespace-nowrap">Cohort</th>
-										<th class="py-2 px-2 text-right whitespace-nowrap">Size</th>
-										{#each Array(Math.min(8, Math.max(...monthlyRetention.map(r => r.retention_pct.length)))) as _, i}
-											<th class="py-2 px-2 text-right">M{i}</th>
-										{/each}
-									</tr>
-								</thead>
-								<tbody>
-									{#each monthlyRetention.slice(0, 12) as cohort}
-										<tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
-											<td class="py-1.5 pr-3 font-mono text-slate-300 whitespace-nowrap">
-												{new Date(cohort.cohort).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
-											</td>
-											<td class="py-1.5 px-2 text-right font-mono text-slate-400">{formatNumber(cohort.cohort_size)}</td>
-											{#each cohort.retention_pct.slice(0, 8) as pct, i}
-												{@const colors = getHeatmapColor(pct)}
-												<td
-													class="py-1.5 px-2 text-right font-mono font-medium"
-													style="background-color: {colors.bg}; color: {colors.text}"
-												>
-													{pct.toFixed(0)}%
-												</td>
-											{/each}
-											{#each Array(Math.max(0, 8 - cohort.retention_pct.length)) as _}
-												<td class="py-1.5 px-2 text-right text-slate-600">-</td>
-											{/each}
-										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
-						<div class="mt-2 text-xs text-slate-500">
-							M0 = first month (always 100%), M1+ = subsequent months. Blue to Yellow/Orange = higher retention.
-						</div>
-					</div>
-				{/if}
-			{/if}
-		</section>
-
 
 		<!-- Zaps Section -->
 		<section class="mb-12">
@@ -1132,39 +761,11 @@ onMount(() => {
 		<section class="mb-12">
 			<h2 class="mb-4">
 				<div class="text-2xl sm:text-3xl font-bold tracking-tight text-emerald-400">Events</div>
-				<div class="mt-1 text-xs font-normal text-slate-500">Event publishing activity and types</div>
+				<div class="mt-1 text-xs font-normal text-slate-500">Event publishing activity</div>
 			</h2>
 
-			<!-- Engagement & Throughput Summary -->
-			<div class="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-				{#if engagementLoading}
-					<div class="rounded-lg border border-slate-700/30 bg-slate-900/50 p-3 animate-pulse">
-						<div class="h-3 w-24 rounded bg-slate-700/50 mb-2"></div>
-						<div class="h-7 w-16 rounded bg-slate-700/40 mb-2"></div>
-						<div class="space-y-1.5">
-							<div class="flex justify-between">
-								<div class="h-2.5 w-16 rounded bg-slate-800/50"></div>
-								<div class="h-2.5 w-8 rounded bg-slate-800/50"></div>
-							</div>
-							<div class="flex justify-between">
-								<div class="h-2.5 w-20 rounded bg-slate-800/50"></div>
-								<div class="h-2.5 w-8 rounded bg-slate-800/50"></div>
-							</div>
-						</div>
-					</div>
-				{:else if engagement}
-					<div class="rounded-lg border border-emerald-500/20 bg-slate-900/50 p-3">
-						<div class="flex items-center justify-between text-sm text-slate-400">
-							<span>Engagement ({engagement.period_days}d)<InfoTooltip text="Average replies and reactions per original note (kind 1 without reply tags). Measures how much interaction notes receive on average." /></span>
-						</div>
-						<div class="mt-1.5 font-mono text-2xl font-bold text-emerald-400">{(engagement.replies_per_note + engagement.reactions_per_note).toFixed(2)}<span class="text-base text-slate-500">/note</span></div>
-						<div class="mt-2 text-sm text-slate-500 space-y-1">
-							<div class="flex justify-between"><span>replies/note</span><span class="font-mono text-slate-400">{engagement.replies_per_note.toFixed(2)}</span></div>
-							<div class="flex justify-between"><span>reactions/note</span><span class="font-mono text-slate-400">{engagement.reactions_per_note.toFixed(2)}</span></div>
-							<div class="flex justify-between"><span>original notes</span><span class="font-mono text-slate-400">{formatNumber(engagement.original_notes)}</span></div>
-						</div>
-					</div>
-				{/if}
+			<!-- Throughput Summary -->
+			<div class="mb-3">
 				{#if throughputLoading}
 					<div class="rounded-lg border border-slate-700/30 bg-slate-900/50 p-3 animate-pulse">
 						<div class="h-3 w-28 rounded bg-slate-700/50 mb-2"></div>
@@ -1203,40 +804,8 @@ onMount(() => {
 				<div class="mb-3 rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
 					<div class="flex flex-wrap items-center justify-between gap-2 mb-2">
 						<h3 class="text-sm font-semibold text-slate-400">Event publishing by hour, UTC (7d avg)<InfoTooltip text="Average number of events published per hour of the day (UTC), averaged over the last 7 days. Shows when users are most active." /></h3>
-						<div class="flex gap-1 rounded-lg bg-slate-800/50 p-1">
-							{#each ['all', 1, 0, 3, 6, 7, 9735] as tab}
-								<button
-									onclick={() => hourlyActivityTab = tab as typeof hourlyActivityTab}
-									class="px-2 py-1 text-xs font-medium rounded transition-colors {hourlyActivityTab === tab ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-400 hover:text-slate-300'}"
-								>
-									{HOURLY_TAB_LABELS[tab as keyof typeof HOURLY_TAB_LABELS]}
-								</button>
-							{/each}
-						</div>
 					</div>
-					<Chart labels={selectedHourlyLabels()} datasets={selectedHourlyData()} type="bar" height={160} />
-				</div>
-			{/if}
-
-			<!-- Daily Events Stacked Bar Chart -->
-			{#if dailyEventsLoading || topKindsLoading}
-				<div class="mb-3">
-					<LoadingSkeleton type="chart" height={260} />
-				</div>
-			{:else if dailyEvents.length > 0 && kindActivityData.size > 0}
-				<div class="mb-3 rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
-					<h3 class="mb-2 text-sm font-semibold text-slate-400">Daily Events by Kind (30d)<InfoTooltip text="Total events per day, broken down by event kind. Shows the top 10 event kinds by volume, with all others grouped as 'Other'." /></h3>
-					<Chart labels={eventsChartLabels} datasets={eventsStackedData()} type="bar" stacked={true} height={260} />
-				</div>
-			{/if}
-
-			<!-- Event Types Table -->
-			{#if topKindsLoading}
-				<LoadingSkeleton type="table" rows={10} />
-			{:else if topKinds.length > 0}
-				<div class="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
-					<h3 class="mb-2 text-sm font-semibold text-slate-400">Event Types<InfoTooltip text="All indexed event types ranked by volume. Click column headers to sort. 'Users' shows unique pubkeys that have published this event type." /></h3>
-					<SortableTable data={topKinds} />
+					<Chart labels={hourlyLabels} datasets={hourlyData} type="bar" height={160} />
 				</div>
 			{/if}
 		</section>
