@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte'
-import { base } from '$app/paths'
+import { asset, resolve } from '$app/paths'
 import {
 	type ActiveUsersRow,
 	type DashboardData,
@@ -11,11 +11,11 @@ import {
 	type ZapHistogramBucket,
 	type ZapStatsAggregate,
 	type ZapStatsByPeriod,
-} from '$lib/api'
-import Chart from '$lib/components/Chart.svelte'
-import LoadingSkeleton from '$lib/components/LoadingSkeleton.svelte'
-import InfoTooltip from '$lib/components/InfoTooltip.svelte'
-import { formatDate, formatNumber, formatSats, percentChange, formatPercent } from '$lib/format'
+} from '#lib/api.ts'
+import Chart from '#lib/components/Chart.svelte'
+import LoadingSkeleton from '#lib/components/LoadingSkeleton.svelte'
+import InfoTooltip from '#lib/components/InfoTooltip.svelte'
+import { formatDate, formatNumber, formatSats, percentChange, formatPercent } from '#lib/format.ts'
 
 let { data }: { data: { dashboard: DashboardData } } = $props()
 
@@ -331,7 +331,7 @@ function scheduleRelayChecks(): void {
 }
 
 async function fetchDashboard(): Promise<DashboardData> {
-	const res = await fetch(`${base}/api/dashboard`, {
+	const res = await fetch(resolve('/api/dashboard'), {
 		cache: 'no-store',
 	})
 
@@ -405,7 +405,7 @@ onMount(() => {
 		<header class="mb-8">
 			<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
 				<h1 class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-200">
-					<img src="{base}/logo/SVG/Mark Color on Dark.svg" alt="Nostr Stats" class="h-7 w-7" />
+					<img src={asset('logo/SVG/Mark Color on Dark.svg')} alt="Nostr Stats" class="h-7 w-7" />
 					<span>Nostr Stats</span>
 				</h1>
 				<div class="flex items-center gap-2 sm:gap-3 text-xs order-last sm:order-none w-full sm:w-auto">
@@ -426,7 +426,7 @@ onMount(() => {
 					{/if}
 				</div>
 			<div class="flex items-center gap-2 text-xs">
-				<a href="{base}/about" class="font-semibold text-slate-400 underline decoration-slate-600 hover:text-violet-400 hover:decoration-violet-400 transition-colors">About</a>
+				<a href={resolve('/about')} class="font-semibold text-slate-400 underline decoration-slate-600 hover:text-violet-400 hover:decoration-violet-400 transition-colors">About</a>
 				{#if lastUpdated}
 					<span class="text-slate-500 hidden sm:inline">{lastUpdated.toLocaleTimeString()}</span>
 				{/if}

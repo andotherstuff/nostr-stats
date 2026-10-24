@@ -1,5 +1,5 @@
 <script lang="ts">
-import { formatNumber, formatPercent } from '$lib/format'
+import { formatNumber, formatPercent } from '#lib/format.ts'
 
 interface Props {
 	label: string

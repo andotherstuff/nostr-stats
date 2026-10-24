@@ -1,7 +1,6 @@
 {
-	"extends": "./.svelte-kit/tsconfig.json",
+	"extends": "$app/tsconfig",
 	"compilerOptions": {
-		"rewriteRelativeImportExtensions": true,
 		"allowJs": true,
 		"checkJs": true,
 		"esModuleInterop": true,
@@ -11,10 +10,11 @@
 		"sourceMap": true,
 		"strict": true,
 		"moduleResolution": "bundler"
-	}
-	// Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
-	// except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
+	},
+	"include": ["src", "vite.config.ts"],
+	"exclude": ["src/service-worker"]
+	// Path aliases are handled by subpath imports in package.json; see https://svelte.dev/docs/kit/$lib
 	//
 	// To make changes to top-level options such as include and exclude, we recommend extending
-	// the generated config; see https://svelte.dev/docs/kit/configuration#typescript
+	// the generated config; see https://svelte.dev/docs/kit/@sveltejs-kit-vite#typescript
 }

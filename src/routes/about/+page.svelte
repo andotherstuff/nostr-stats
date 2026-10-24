@@ -1,5 +1,5 @@
 <script lang="ts">
-import { base } from '$app/paths'
+import { asset, resolve } from '$app/paths'
 </script>
 
 <svelte:head>
@@ -22,12 +22,12 @@ import { base } from '$app/paths'
 	<div class="mx-auto max-w-3xl px-4 py-8">
 		<!-- Header -->
 		<header class="mb-8">
-			<a href="{base}/" class="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors text-sm mb-4">
+			<a href={resolve('/')} class="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors text-sm mb-4">
 				<span>←</span>
 				<span>Back to Dashboard</span>
 			</a>
 			<h1 class="flex items-center gap-3 text-2xl font-bold tracking-tight text-slate-200">
-				<img src="{base}/logo/SVG/Mark Color on Dark.svg" alt="Nostr Stats" class="h-8 w-8" />
+				<img src={asset('logo/SVG/Mark Color on Dark.svg')} alt="Nostr Stats" class="h-8 w-8" />
 				<span>About Nostr Stats</span>
 			</h1>
 		</header>

@@ -1,5 +1,4 @@
 @import 'tailwindcss';
-@plugin '@tailwindcss/typography';
 
 /* Custom xs breakpoint for extra-small screens */
 @theme {

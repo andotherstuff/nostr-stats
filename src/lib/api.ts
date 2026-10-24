@@ -1,17 +1,3 @@
-import { env } from '$env/dynamic/public'
-
-const API_URL = env.PUBLIC_API_URL || 'http://localhost:8080'
-
-async function fetchApi<T>(endpoint: string): Promise<T> {
-	const res = await fetch(`${API_URL}${endpoint}`)
-
-	if (!res.ok) {
-		throw new Error(`API error: ${res.status} ${res.statusText}`)
-	}
-
-	return res.json()
-}
-
 // Types
 export interface OverviewStats {
 	total_events: number
@@ -79,72 +65,10 @@ export interface KindDetail {
 	events_30d: number
 }
 
-// API functions
-export function getOverview(): Promise<OverviewStats> {
-	return fetchApi('/api/v1/stats')
-}
-
-// Granular stats endpoints (for independent loading)
-export function getTotalEvents(): Promise<CountResponse> {
-	return fetchApi('/api/v1/stats/events/total')
-}
-
-export function getTotalPubkeys(): Promise<CountResponse> {
-	return fetchApi('/api/v1/stats/pubkeys/total')
-}
-
-export function getTotalKinds(): Promise<CountResponse> {
-	return fetchApi('/api/v1/stats/kinds/total')
-}
-
-export function getEarliestEvent(): Promise<TimestampResponse> {
-	return fetchApi('/api/v1/stats/events/earliest')
-}
-
-export function getLatestEvent(): Promise<TimestampResponse> {
-	return fetchApi('/api/v1/stats/events/latest')
-}
-
-export function getActiveUsersSummary(): Promise<ActiveUsersSummary> {
-	return fetchApi('/api/v1/stats/users/active')
-}
-
-export function getActiveUsersDaily(limit = 30): Promise<ActiveUsersRow[]> {
-	return fetchApi(`/api/v1/stats/users/active/daily?limit=${limit}`)
-}
-
-export function getActiveUsersWeekly(limit = 12): Promise<ActiveUsersRow[]> {
-	return fetchApi(`/api/v1/stats/users/active/weekly?limit=${limit}`)
-}
-
-export function getActiveUsersMonthly(limit = 12): Promise<ActiveUsersRow[]> {
-	return fetchApi(`/api/v1/stats/users/active/monthly?limit=${limit}`)
-}
-
-export function getEventsByDay(days = 30): Promise<EventCountByPeriod[]> {
-	return fetchApi(`/api/v1/stats/events?days=${days}&group_by=day`)
-}
-
-export function getEventsByWeek(limit = 12): Promise<EventCountByPeriod[]> {
-	return fetchApi(`/api/v1/stats/events?group_by=week&limit=${limit}`)
-}
-
-export function getKinds(limit = 20): Promise<KindSummary[]> {
-	return fetchApi(`/api/v1/kinds?limit=${limit}`)
-}
-
-export function getKindDetail(kind: number): Promise<KindDetail> {
-	return fetchApi(`/api/v1/kinds/${kind}`)
-}
-
 export interface KindActivityRow {
 	period: string
 	event_count: number
 	unique_pubkeys: number
-}
-
-export function getKindActivity(kind: number, limit = 30): Promise<KindActivityRow[]> {
-	return fetchApi(`/api/v1/kinds/${kind}/activity?limit=${limit}`)
 }
 
 // Throughput (events per hour aggregate)
@@ -153,21 +77,10 @@ export interface ThroughputStats {
 	total_events_7d: number
 }
 
-export function getThroughput(): Promise<ThroughputStats> {
-	return fetchApi('/api/v1/stats/throughput')
-}
-
 // New users time series
 export interface NewUsersRow {
 	period: string
 	new_users: number
-}
-
-export function getNewUsers(
-	groupBy: 'day' | 'week' | 'month' = 'day',
-	limit = 30
-): Promise<NewUsersRow[]> {
-	return fetchApi(`/api/v1/stats/users/new?group_by=${groupBy}&limit=${limit}`)
 }
 
 // User retention (cohort analysis)
@@ -178,25 +91,12 @@ export interface RetentionCohort {
 	retention_pct: number[]
 }
 
-export function getUserRetention(
-	cohortSize: 'week' | 'month' = 'week',
-	limit = 12
-): Promise<RetentionCohort[]> {
-	return fetchApi(`/api/v1/stats/users/retention?cohort_size=${cohortSize}&limit=${limit}`)
-}
-
 // Hourly activity pattern
 export interface HourlyActivityRow {
 	hour: number
 	event_count: number
 	unique_pubkeys: number
 	avg_per_day: number
-}
-
-export function getHourlyActivity(days = 7, kind?: number): Promise<HourlyActivityRow[]> {
-	const params = new URLSearchParams({ days: days.toString() })
-	if (kind !== undefined) params.append('kind', kind.toString())
-	return fetchApi(`/api/v1/stats/activity/hourly?${params}`)
 }
 
 // Zap statistics
@@ -217,14 +117,6 @@ export interface ZapStatsByPeriod {
 	avg_zap_sats: number
 }
 
-export function getZapStats(days = 30): Promise<ZapStatsAggregate> {
-	return fetchApi(`/api/v1/stats/zaps?days=${days}`)
-}
-
-export function getZapStatsByDay(days = 30, limit = 30): Promise<ZapStatsByPeriod[]> {
-	return fetchApi(`/api/v1/stats/zaps?days=${days}&group_by=day&limit=${limit}`)
-}
-
 // Zap histogram
 export interface ZapHistogramBucket {
 	bucket: string
@@ -234,10 +126,6 @@ export interface ZapHistogramBucket {
 	total_sats: number
 	pct_count: number
 	pct_sats: number
-}
-
-export function getZapHistogram(days = 30): Promise<ZapHistogramBucket[]> {
-	return fetchApi(`/api/v1/stats/zaps/histogram?days=${days}`)
 }
 
 // Engagement statistics
@@ -250,10 +138,6 @@ export interface EngagementStats {
 	reactions_per_note: number
 }
 
-export function getEngagement(days = 30): Promise<EngagementStats> {
-	return fetchApi(`/api/v1/stats/engagement?days=${days}`)
-}
-
 // Long-form content statistics
 export interface LongformStats {
 	articles_count: number
@@ -263,21 +147,12 @@ export interface LongformStats {
 	estimated_total_words: number
 }
 
-export function getLongformStats(days?: number): Promise<LongformStats> {
-	const params = days ? `?days=${days}` : ''
-	return fetchApi(`/api/v1/stats/longform${params}`)
-}
-
 // Relay distribution (NIP-65 relay lists)
 export interface RelayDistributionRow {
 	relay_url: string
 	user_count: number
 	read_count: number
 	write_count: number
-}
-
-export function getRelayDistribution(limit = 100): Promise<RelayDistributionRow[]> {
-	return fetchApi(`/api/v1/stats/relays/distribution?limit=${limit}`)
 }
 
 export interface DashboardData {
