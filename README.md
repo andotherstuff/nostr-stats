@@ -18,7 +18,7 @@ Nostr Stats provides a comprehensive view of Nostr network activity, including e
 
 ## Tech Stack
 
-- **Framework**: SvelteKit 2 with Svelte 5
+- **Framework**: SvelteKit 3 with Svelte 5
 - **Styling**: Tailwind CSS 4
 - **Charts**: Chart.js
 - **Linting/Formatting**: Biome
@@ -28,7 +28,7 @@ Nostr Stats provides a comprehensive view of Nostr network activity, including e
 
 ## Prerequisites
 
-- [Bun](https://bun.sh/) (recommended) or Node.js 18+
+- [Bun](https://bun.sh/) (recommended) or Node.js 22.17+
 - A running [Pensieve](https://github.com/andotherstuff/pensieve) API backend (see Environment Variables)
 
 ## Installation
@@ -105,7 +105,7 @@ API_TOKEN=your-api-token-here
 ```
 src/
 ├── lib/
-│   ├── api.ts           # API client and types for backend
+│   ├── api.ts           # API response types and kind names
 │   ├── format.ts        # Formatting utilities (numbers, dates, etc.)
 │   ├── components/      # Reusable Svelte components
 │   │   ├── Chart.svelte
@@ -114,12 +114,17 @@ src/
 │   │   ├── LoadingSkeleton.svelte
 │   │   ├── SortableTable.svelte
 │   │   └── StatCard.svelte
+│   ├── server/          # Server-only code (upstream API calls, caching)
 │   └── assets/          # Static assets (favicon, etc.)
 ├── routes/
 │   ├── +page.svelte     # Main dashboard page
+│   ├── +page.server.ts  # Server load for the dashboard
+│   ├── api/dashboard/   # JSON endpoint used for client refreshes
 │   ├── +layout.svelte   # App layout
 │   ├── +layout.ts       # Prerender config
 │   └── layout.css       # Global styles
+├── env.ts               # Environment variable declarations
+├── hooks.server.ts      # Security headers
 └── app.html             # HTML template
 ```
 
@@ -130,6 +135,9 @@ src/
 - Use Biome for formatting (not Prettier)
 - Components use Svelte 5 runes syntax (`$state`, `$derived`, `$effect`)
 - API types are defined in `src/lib/api.ts`
+- Import from `src/lib` with `#lib/...` and the file extension (e.g. `#lib/api.ts`); `$lib` was removed in SvelteKit 3
+- SvelteKit config lives in the `sveltekit()` plugin in `vite.config.ts` (`svelte.config.js` is no longer supported)
+- Environment variables are declared in `src/env.ts` and read from `$app/env/private`; keep secrets out of browser code
 
 ## Deployment
 
@@ -146,7 +154,7 @@ Set these environment variables in Vercel:
 The dashboard uses:
 - `src/routes/+page.server.ts` for the initial server-rendered payload
 - `src/routes/api/dashboard/+server.ts` for a single aggregated refresh endpoint
-- `src/lib/server/dashboard.ts` to fan out to the upstream Pensieve API in parallel
+- `src/lib/server/dashboard.ts` to fan out to the upstream Pensieve API in parallel, with a 60-second in-process cache so cache-busting query strings can't multiply upstream load
 
 This keeps the bearer token off the client while also reducing the browser request waterfall.
 

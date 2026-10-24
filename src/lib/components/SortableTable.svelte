@@ -1,6 +1,6 @@
 <script lang="ts">
-import { getKindName } from '$lib/api'
-import { formatNumber } from '$lib/format'
+import { getKindName } from '#lib/api.ts'
+import { formatNumber } from '#lib/format.ts'
 
 interface KindRow {
 	kind: number

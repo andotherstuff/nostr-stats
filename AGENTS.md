@@ -10,7 +10,7 @@ Nostr Stats is a SvelteKit dashboard that displays statistics from a Nostr relay
 
 ## Tech Stack
 
-- **Framework**: SvelteKit 2 with Svelte 5
+- **Framework**: SvelteKit 3 with Svelte 5
 - **Styling**: Tailwind CSS 4
 - **Charts**: Chart.js
 - **Linting/Formatting**: Biome
@@ -78,14 +78,19 @@ bun run biome:fix
 ```
 src/
 ├── lib/
-│   ├── api.ts           # API client and types for backend
+│   ├── api.ts           # API response types and kind names
 │   ├── format.ts        # Formatting utilities (numbers, dates, etc.)
 │   ├── components/      # Reusable Svelte components
+│   ├── server/          # Server-only code (upstream API calls, caching)
 │   └── assets/          # Static assets (favicon, etc.)
 ├── routes/
 │   ├── +page.svelte     # Main dashboard page
+│   ├── +page.server.ts  # Server load for the dashboard
+│   ├── api/dashboard/   # JSON endpoint used for client refreshes
 │   ├── +layout.svelte   # App layout
 │   └── +layout.ts       # Prerender config
+├── env.ts               # Environment variable declarations
+├── hooks.server.ts      # Security headers
 └── app.html             # HTML template
 ```
 
@@ -96,6 +101,9 @@ src/
 - Use Biome for formatting (not Prettier)
 - Components use Svelte 5 runes syntax (`$state`, `$derived`, `$effect`)
 - API types are defined in `src/lib/api.ts`
+- Import from `src/lib` with `#lib/...` and the file extension (e.g. `#lib/api.ts`); `$lib` was removed in SvelteKit 3
+- SvelteKit config lives in the `sveltekit()` plugin in `vite.config.ts` (`svelte.config.js` is no longer supported)
+- Environment variables are declared in `src/env.ts` and read from `$app/env/private`; keep secrets out of browser code
 
 ## API Documentation
 

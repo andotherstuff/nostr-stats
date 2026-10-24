@@ -1,4 +1,4 @@
-import { DASHBOARD_CACHE_CONTROL, loadDashboardData } from '$lib/server/dashboard'
+import { DASHBOARD_CACHE_CONTROL, loadDashboardData } from '#lib/server/dashboard.ts'
 import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ fetch, setHeaders }) => {

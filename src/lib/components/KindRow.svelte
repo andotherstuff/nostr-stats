@@ -1,6 +1,6 @@
 <script lang="ts">
-import { getKindName } from '$lib/api'
-import { formatNumber, formatRelativeTime } from '$lib/format'
+import { getKindName } from '#lib/api.ts'
+import { formatNumber, formatRelativeTime } from '#lib/format.ts'
 
 interface Props {
 	kind: number

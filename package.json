@@ -3,6 +3,13 @@
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
+	"imports": {
+		"#lib": "./src/lib/index.ts",
+		"#lib/*": "./src/lib/*"
+	},
+	"engines": {
+		"node": ">=22.17"
+	},
 	"scripts": {
 		"guard:secrets": "node scripts/guard-no-public-token.mjs",
 		"dev": "bun run guard:secrets && vite dev",
@@ -18,20 +25,19 @@
 		"biome:fix": "biome check --write ."
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.3.11",
-		"@sveltejs/adapter-auto": "^7.0.0",
-		"@sveltejs/adapter-vercel": "^6.3.3",
-		"@sveltejs/kit": "^2.49.2",
-		"@sveltejs/vite-plugin-svelte": "^6.2.1",
-		"@tailwindcss/typography": "^0.5.19",
-		"@tailwindcss/vite": "^4.1.18",
-		"svelte": "^5.46.1",
-		"svelte-check": "^4.3.5",
-		"tailwindcss": "^4.1.18",
-		"typescript": "^5.9.3",
-		"vite": "^7.3.0"
+		"@biomejs/biome": "^2.6.2",
+		"@sveltejs/adapter-vercel": "^7.0.1",
+		"@sveltejs/kit": "^3.1.0",
+		"@sveltejs/vite-plugin-svelte": "^7.3.1",
+		"@tailwindcss/vite": "^4.3.3",
+		"@types/node": "^24.19.2",
+		"svelte": "^5.57.2",
+		"svelte-check": "^4.7.7",
+		"tailwindcss": "^4.3.3",
+		"typescript": "^6.0.3",
+		"vite": "^8.3.5"
 	},
 	"dependencies": {
-		"chart.js": "^4.5.1"
+		"chart.js": "^4.6.1"
 	}
 }

@@ -1,5 +1,3 @@
-import { env as privateEnv } from '$env/dynamic/private'
-import { env as publicEnv } from '$env/dynamic/public'
 import type {
 	ActiveUsersRow,
 	CountResponse,
@@ -12,10 +10,9 @@ import type {
 	ZapHistogramBucket,
 	ZapStatsAggregate,
 	ZapStatsByPeriod,
-} from '$lib/api'
+} from '#lib/api.ts'
+import { API_TOKEN, PUBLIC_API_URL as API_URL } from '$app/env/private'
 
-const API_URL = publicEnv.PUBLIC_API_URL || 'http://localhost:8080'
-const API_TOKEN = privateEnv.API_TOKEN || ''
 export const DASHBOARD_CACHE_CONTROL = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300'
 
 type AppFetch = typeof fetch
@@ -47,7 +44,31 @@ async function safeFetch<T>(promise: Promise<T>, fallback: T, label: string): Pr
 	}
 }
 
-export async function loadDashboardData(fetchFn: AppFetch): Promise<DashboardData> {
+// The CDN cache is keyed on the full URL, so a unique query string bypasses it. Keep a short
+// in-process cache and share in-flight loads so each instance hits the upstream API at most
+// once per TTL, however many requests arrive.
+const DASHBOARD_TTL_MS = 60_000
+let cachedDashboard: { data: DashboardData; expiresAt: number } | null = null
+let inflightDashboard: Promise<DashboardData> | null = null
+
+export function loadDashboardData(fetchFn: AppFetch): Promise<DashboardData> {
+	if (cachedDashboard && cachedDashboard.expiresAt > Date.now()) {
+		return Promise.resolve(cachedDashboard.data)
+	}
+
+	inflightDashboard ??= fetchDashboardData(fetchFn)
+		.then((data) => {
+			cachedDashboard = { data, expiresAt: Date.now() + DASHBOARD_TTL_MS }
+			return data
+		})
+		.finally(() => {
+			inflightDashboard = null
+		})
+
+	return inflightDashboard
+}
+
+async function fetchDashboardData(fetchFn: AppFetch): Promise<DashboardData> {
 	// Retention is paused pending validation; per-kind history and engagement are paused
 	// to reduce database load. Keep these requests out of both page loads and refreshes.
 	const [
