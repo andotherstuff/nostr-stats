@@ -6,13 +6,12 @@ Instructions for AI agents working on this codebase.
 
 ## Project Overview
 
-Nostr Stats is a SvelteKit dashboard that displays statistics from a Nostr relay/indexer backend. It now relies on server-side routes so secrets stay on the server.
+Nostr Stats was a SvelteKit dashboard for Nostr network statistics. The Pensieve API that powered it has been shut down, so the site is now a single prerendered page announcing that it is permanently offline. The old dashboard code lives in git history.
 
 ## Tech Stack
 
 - **Framework**: SvelteKit 3 with Svelte 5
 - **Styling**: Tailwind CSS 4
-- **Charts**: Chart.js
 - **Linting/Formatting**: Biome
 - **Package Manager**: Bun
 - **Deployment**: Vercel (adapter-vercel)
@@ -78,18 +77,12 @@ bun run biome:fix
 ```
 src/
 ├── lib/
-│   ├── api.ts           # API response types and kind names
-│   ├── format.ts        # Formatting utilities (numbers, dates, etc.)
-│   ├── components/      # Reusable Svelte components
-│   ├── server/          # Server-only code (upstream API calls, caching)
 │   └── assets/          # Static assets (favicon, etc.)
 ├── routes/
-│   ├── +page.svelte     # Main dashboard page
-│   ├── +page.server.ts  # Server load for the dashboard
-│   ├── api/dashboard/   # JSON endpoint used for client refreshes
+│   ├── +page.svelte     # Offline notice page
 │   ├── +layout.svelte   # App layout
-│   └── +layout.ts       # Prerender config
-├── env.ts               # Environment variable declarations
+│   ├── +layout.ts       # Prerender config
+│   └── layout.css       # Global styles
 ├── hooks.server.ts      # Security headers
 └── app.html             # HTML template
 ```
@@ -100,22 +93,9 @@ src/
 - Follow existing patterns in the codebase
 - Use Biome for formatting (not Prettier)
 - Components use Svelte 5 runes syntax (`$state`, `$derived`, `$effect`)
-- API types are defined in `src/lib/api.ts`
-- Import from `src/lib` with `#lib/...` and the file extension (e.g. `#lib/api.ts`); `$lib` was removed in SvelteKit 3
+- Import from `src/lib` with `#lib/...` and the file extension (e.g. `#lib/assets/favicon.svg`); `$lib` was removed in SvelteKit 3
 - SvelteKit config lives in the `sveltekit()` plugin in `vite.config.ts` (`svelte.config.js` is no longer supported)
-- Environment variables are declared in `src/env.ts` and read from `$app/env/private`; keep secrets out of browser code
-
-## API Documentation
-
-The canonical API documentation is available at: **https://ipf.works/docs**
-
-Always reference this documentation when working with backend endpoints. It contains the full API specification including request/response schemas.
 
 ## Environment Variables
 
-The app uses these environment variables (set via `.env` or build args):
-
-- `PUBLIC_API_URL` - Backend API URL (defaults to `http://localhost:8080`)
-- `API_TOKEN` - Server-only API authentication token
 - `BASE_PATH` - Optional subpath base if needed
-
